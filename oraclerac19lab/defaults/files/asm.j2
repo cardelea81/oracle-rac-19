@@ -1,0 +1,11 @@
+#!/usr/bin/expect
+spawn oracleasm configure -i
+expect "\[Default user to own the driver interface []:\n" 
+send -- "grid\r"
+expect "\[Default group to own the driver interface []:]\n" 
+send -- "dba\r"
+expect "\[Scan for Oracle ASM disks on boot (y/n):]\n"
+send -- "y\r"
+expect "\[Writing Oracle ASM library driver configuration: done]\n"
+send -- "\r"
+expect eof

@@ -1,0 +1,14 @@
+#!/bin/bash
+oracleasm listdisks
+oracleasm deletedisk DATA1
+oracleasm deletedisk FRA1
+oracleasm deletedisk OCR_VOTING1
+oracleasm scandisks
+oracleasm listdisks
+#fdisk
+#
+iscsiadm --mode node --targetname  iqn.2023-04.com.example:oracle --logout
+
+#Remove /services
+
+rm -rf /services

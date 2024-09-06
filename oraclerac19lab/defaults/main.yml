@@ -1,0 +1,461 @@
+---
+# tasks file for oracle11gr2---
+- hosts: all
+
+  tasks:
+
+
+#  - name: Enable repo
+#    shell: subscription-manager refresh 
+  - name: ensure a list of packages installed
+    yum:
+     name: "{{ packages }}"
+    vars:
+     packages:
+       - vim
+       - mc
+       - ntp
+       - telnet
+       - bash-completion
+       - net-tools
+       - nm-connection-editor
+       - wget
+       - bind-utils
+       - yum-utils
+       - sos
+       - psacct
+       - binutils
+       - libX11
+       - compat-libcap1
+       - libXau
+       - compat-libstdc++-33
+       - libaio
+       - gcc
+       - libaio-devel
+       - gcc-c++
+       - libdmx
+       - glibc-devel
+       - glibc
+       - ksh
+       - make
+       - libgcc
+       - sysstat
+       - libstdc++
+       - xorg-x11-utils
+       - libstdc++-devel
+       - xorg-x11-xauth
+       - libXext
+       - libXv
+       - libXtst
+       - libXi
+       - libxcb
+       - libXt
+       - libXmu
+       - libXxf86misc
+       - libXxf86dga
+       - libXxf86vm
+       - nfs-utils
+       - iscsi-initiator-utils  
+       - expect
+       - chrony  
+       - smartmontools 
+       - mc
+       - unzip
+       - unixODBC
+       - unixODBC-devel
+       - ksh
+       - elfutils-libelf
+       - elfutils-libelf-devel
+       - tuned
+       - tuned-profiles-oracle
+
+  
+
+  - name: Set authorized key for root copying it from current user
+    authorized_key:
+     user: root
+     state: present
+     key: "{{ lookup('file', lookup('env','HOME') + '/.ssh/id_rsa.pub') }}"
+  - name: clean yum cache
+    shell: yum clean all
+  - name: be sure firewalld is disabled
+    systemd: name=firewalld enabled=no
+    tags:
+     - install
+     - firewalld
+  - name: be sure firewalld is stopped 
+    systemd: name=firewalld state=stopped
+    ignore_errors: yes
+    tags:
+     - install
+     - firewalld
+  - name: ensure SELINUX IS IN PERMISIVE MODE
+    selinux: policy=targeted state=permissive
+  - name: Create a directory gridhome
+    file:
+     path: /services/oracle/grid/19.3/grid_home
+     state: directory
+  - name: Create grid base
+    file:
+     path: /services/oracle/grid/gridbase/
+     state: directory
+  - name: Create ora home
+    file: 
+     path: /services/oracle/db/19.3/db_home
+     state: directory
+    
+  - name: Add group asmdba
+    group:
+     name: asmdba
+     gid: 54333
+     state: present
+    
+  - name: Add group asmoper
+    group: 
+     name: asmoper
+     gid: 54334
+     state: present
+     
+  - name: Add group asmadmin
+    group: 
+     name: asmadmin
+     gid: 54335
+     state: present
+  - name: Add group dba
+    group:
+     name: dba
+     gid: 1030
+     state: present
+  - name: Add group oinstall
+    group:
+     name: oinstall
+     gid: 1012
+     state: present
+  - name: add hosts file   
+    copy: src=etc/oracle19hosts.j2  dest=/etc/hosts
+  - name: oracle limits
+    copy: src=etc/oracle90-nproc.conf.j2 dest=/etc/security/limits.d/90-nproc.conf
+  - name: Add gpg key for oracle repo
+    get_url:
+     url: http://public-yum.oracle.com/RPM-GPG-KEY-oracle-ol7 
+     dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+  - name: kernel parm
+    copy: src=oraclelimits.conf.j2  dest=/etc/security/limits.conf
+  - name: kernel read
+    shell: sysctl -p
+
+  - name:  Make sure a service tumed is running
+    systemd:
+      state: started
+      name: tuned.service
+  - name: Activate the tuned-profiles-oracle profile
+    shell: tuned-adm profile oracle
+  - name: For the grub changes to take effect, run the following 
+    shell: grub2-mkconfig -o /boot/grub2/grub.cfg
+  - name: Install kmod-oracleasm
+    yum:
+     name: kmod-oracleasm
+     state: present
+  - name: Install oracleasm-support
+    yum:
+     name: ftp://172.25.250.30/pub/oracle19/rpm/oracleasm-support-2.1.11-2.el7.x86_64.rpm 
+     state: present
+  - name: Install cvudisk
+    yum: 
+     name: ftp://172.25.250.30/pub/oracle19/rpm/cvuqdisk-1.0.10-1.rpm
+     state: present
+  - name: Install oracleasmlib
+    yum:
+     name: ftp://172.25.250.30/pub/oracle19/rpm/oracleasmlib-2.0.12-1.el7.x86_64.rpm
+     state: present
+  - name: Install oracle-database-preinstall
+    yum:
+     name: ftp://172.25.250.30/pub/oracle19/rpm/oracle-database-preinstall-19c-1.0-1.el7.x86_64.rpm
+     state: present
+  - name: Reboot cluster nodes
+    reboot:
+     msg: "Reboot initiated by Ansible"
+     connect_timeout: 5
+     reboot_timeout: 600
+     pre_reboot_delay: 0
+     post_reboot_delay: 30
+     test_command: whoami
+
+  - name: be sure ntp is enabled
+    service: name=ntpd state=started enabled=yes
+  - name: add ntp configuration file
+    copy: src=etc/ntprht.j2  dest=/etc/ntp.conf
+  - name: Sync ntp to storage.lab.dev.example.com
+    shell: service ntpd stop && ntpdate storage.lab.dev.example.com && service ntpd start
+    tags: ntp
+  - name: Set time zone for lab nodes
+    shell: timedatectl set-timezone Europe/Prague
+  - name: Make sure Chrony is started up
+    service: name=chronyd state=started enabled=yes
+    tags: chrony 
+ 
+  - name: Umask 022
+    copy: src=etc/oracle19racprofile.j2  dest=/etc/profile
+  - name: grid and ora install X
+    yum:
+     name: xorg-x11-server-utils
+     state: present
+
+  - name: read kern parm before install
+    shell: sysctl -p
+  - name: Check if user grid exists
+    command: getent passwd grid
+    ignore_errors: yes
+
+  - name: add grid user
+    user: 
+     name: grid
+     uid: 5431
+     group: oinstall
+     shell: /bin/bash
+     home: /services/oracle/gridhome
+     state: present
+  - name: add extra group for griduser
+    user:
+     name: grid
+     groups: oinstall,dba
+     append: yes
+
+  - name: add oracle user
+    user: 
+     name: oracle
+     uid: 5432
+     group: oinstall
+     shell: /bin/bash
+     home: /services/oracle/orahome
+     state: present
+
+  - name: add extra group for oracle
+    user:
+     name: oracle
+     groups: oinstall,dba
+     append: yes
+
+     
+  - name:  Permission for oracle
+    file:
+     path: /services/oracle
+     state: directory
+     recurse: yes
+     owner: oracle
+     group: oinstall
+  - name:  Permission for grid
+    file:
+     path: /services/oracle/grid
+     state: directory
+     recurse: yes
+     owner: grid
+     group: oinstall
+  - name: Permision for gridhome
+    file:
+     path: /services/oracle/gridhome
+     state: directory
+     owner: grid
+     group: oinstall
+      
+  - name: Oracle folder permision
+    file:
+     path: /services/oracle
+     state: directory
+     mode: '0775'
+
+  - name: Create a 2048-bit SSH key for user oracle
+    user:
+      name: oracle
+      generate_ssh_key: yes
+      ssh_key_bits: 2048
+      ssh_key_file: .ssh/id_rsa  
+
+  - name: Set oracle user password
+    shell: echo oracle| passwd --stdin oracle
+
+  - name: Create a 2048-bit SSH key for usergrid
+    user:
+       name: grid
+       generate_ssh_key: yes
+       ssh_key_bits: 2048
+       ssh_key_file: .ssh/id_rsa
+
+
+  - name: Set grid user password
+    shell: echo grid| passwd --stdin grid
+
+
+  - name: Create home dir dbz
+    file:
+     path: /services/oracle/dbz
+     state: directory
+     mode: '0775'
+  - name: add dbz user
+    user:
+     name: dbz
+     uid: 5433
+     group: oinstall
+     shell: /bin/bash
+     home: /services/oracle/dbz
+     state: present
+  - name: add extra group for dbz
+    user:
+     name: dbz
+     groups: oinstall,dba,backupdba,dgdba,kmdba,racdba,oper,asmdba,asmoper
+     append: yes
+
+  - name:  Permission for dbz
+    file:
+     path: /services/oracle/dbz
+     state: directory
+     recurse: yes
+     owner: dbz
+     group: oinstall
+
+  - name: Create a 2048-bit SSH key for user oracle
+    user:
+      name: dbz
+      generate_ssh_key: yes
+      ssh_key_bits: 2048
+      ssh_key_file: .ssh/id_rsa
+
+  - name: Set oracle user password
+    shell: echo dbz| passwd --stdin dbz
+  - name: Copy ISCSI Configuration file  
+    copy: src=etc/initiatorname.iscsi.j2  dest=/etc/iscsi/initiatorname.iscsi
+  - name: Start and enable iscsi service
+    shell: systemctl enable iscsi ; systemctl start iscsi
+  - name: iSCSI Discovery 
+    shell: iscsiadm -m discovery -t sendtargets -p storage.lab.dev.example.com
+  - name: iSCSI Initiator Sessions
+    shell: iscsiadm -m node -l  
+  - name: Run ASM driver configureation
+    become: yes
+    become_user: root
+    shell: |
+      spawn oracleasm configure -i
+       sleep 5
+       expect "\[Default user to own the driver interface []:\n" 
+       send -- "grid\r"
+       expect "\[Default group to own the driver interface []:]\n" 
+       send -- "dba\r"
+       expect "\[Scan for Oracle ASM disks on boot (y/n):]\n"
+       send -- "y\r"
+       expect "\[Writing Oracle ASM library driver configuration: done]\n"
+       send -- "\r"
+       expect eof
+
+    args: 
+      executable: /usr/bin/expect   
+   
+  - name:  initialize the asm disk
+    shell: oracleasm init
+  - name: Scan ASM Disks
+    shell: oracleasm scandisks 
+  - name: List ASM disks
+    shell: oracleasm listdisks
+- hosts: oracle-node01.lab.dev.example.com
+  tasks:
+
+  - name: upadate bash profile for grid user node1
+    copy: 
+     src: bash/oracle19gridbashnode1.j2
+     dest: /services/oracle/gridhome/.bash_profile
+
+  - name: upadate bash profile for dbz user node1
+    copy:
+     src: bash/oracle19dbzbashnode1.j2
+     dest: /services/oracle/dbz/.bash_profile
+
+     
+  - name: upadate bash profile for oracle user
+    copy: 
+     src: bash/oracle19bashnode1.j2
+     dest: /services/oracle/orahome/.bash_profile
+  - name: Scan ASM Disks
+    shell: oracleasm scandisks
+  - name: List ASM disks
+    shell: oracleasm listdisks
+
+  - parted:
+     device: /dev/sdc
+     number: 1
+     state: present
+  - name: Create asm OCR_VOTING1 disk
+    shell: oracleasm createdisk OCR_VOTING1 /dev/sdc1
+
+  - parted:
+     device: /dev/sdb
+     number: 1
+     state: present
+  - name: Create asm FRA1 disk
+    shell: oracleasm createdisk FRA1 /dev/sdb1
+  - parted:
+     device: /dev/sda
+     number: 1
+     state: present
+  - name: Create asm DATA1 disk
+    shell: oracleasm createdisk DATA1 /dev/sda1
+
+  - name: Set ASM disks permisions
+    shell: chown -R grid:dba /dev/oracleasm/disks/*
+  - name: Copy grid archive LINUX.X64_193000_grid_home.zip
+    get_url:
+      url: ftp://172.25.250.30/pub/oracle19/LINUX.X64_193000_grid_home.zip 
+      dest: /tmp
+      owner: grid
+      group: dba
+  - name: Extract Grid archive LINUX.X64_193000_grid_home.zip
+    unarchive:
+     src: /tmp/LINUX.X64_193000_grid_home.zip
+     dest: /services/oracle/grid/19.3/grid_home
+     remote_src: yes
+     owner: grid
+     group: dba
+
+  - name: Copy oracle archive LINUX.X64_193000_db_home.zip
+    get_url:
+      url: ftp://172.25.250.30/pub/oracle19/LINUX.X64_193000_db_home.zip
+      dest: /tmp
+      owner: oracle
+      group: dba
+
+  - name: Extract Oracle archive LINUX.X64_193000_db_home.zip
+    unarchive:
+     src: /tmp/LINUX.X64_193000_db_home.zip
+     dest: /services/oracle/db/19.3/db_home
+     remote_src: yes
+     owner: oracle
+     group: dba
+  - name: Remove Oracle DB installation archives
+    ansible.builtin.file:
+      path: /tmp/LINUX.X64_193000_db_home.zip
+      state: absent
+  - name: Remove Oracle GRID installation archives
+    ansible.builtin.file:
+      path: /tmp/LINUX.X64_193000_grid_home.zip
+      state: absent
+- hosts: oracle-node02.lab.dev.example.com
+  tasks:
+
+  - name: upadate bash profile for grid user node2
+    copy:
+     src: bash/oracle19gridbashnode2.j2 
+     dest: /services/oracle/gridhome/.bash_profile
+
+  - name: upadate bash profile for dbz user node2
+    copy:
+     src: bash/oracle19dbzbashnode2.j2
+     dest: /services/oracle/dbz/.bash_profile
+
+  - name: upadate bash profile for oracle user
+    copy:
+     src: bash/oracle19bashnode2.j2
+     dest: /services/oracle/orahome/.bash_profile
+  - name: Scan ASM Disks
+    shell: oracleasm scandisks
+  - name: List ASM disks
+    shell: oracleasm listdisks
+  - name: Set ASM disks permisions
+    shell: chown -R grid:dba  /dev/oracleasm/disks/*

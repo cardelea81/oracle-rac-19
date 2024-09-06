@@ -1,0 +1,27 @@
+# .bash_profile
+
+# Get the aliases and functions
+if [ -f ~/.bashrc ]; then
+	. ~/.bashrc
+fi
+
+# User specific environment and startup programs
+
+PATH=$PATH:$HOME/bin
+
+# Grid Settings
+export ORACLE_HOSTNAME=oracle-debezium-rac-01.mwqe.psi.rdu2.redhat.com
+export TMPDIR=$TMP
+export TMP=/tmp
+export TMPDIR=$TMP
+export ORACLE_BASE="/services/oracle/app/grid/gridbase"
+export ORACLE_HOME="/services/oracle/app/grid/19.3/grid_home"
+export GRID_BASE="/services/oracle/app/grid/gridbase"
+export GRID_HOME="/services/oracle/app/grid/19.3/grid_home"
+export ORACLE_SID=+ASM1
+export ORACLE_TERM=xterm
+export PATH=/usr/sbin:/usr/local/bin:$PATH
+export PATH=$ORACLE_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$ORACLE_HOME/lib:/lib:/usr/lib
+export CLASSPATH=$ORACLE_HOME/jlib:$ORACLE_HOME/rdbms/jlib
+

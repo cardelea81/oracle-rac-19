@@ -1,0 +1,17 @@
+[Unit]
+Description=Oracle DB
+After=syslog.target network.target
+
+[Service]
+LimitNOFILE=65536
+LimitNPROC=16384
+
+Type=forking
+User=oracle
+Group=oinstall
+ExecStart=/services/oracle/app/oracle/product/19.3/db/bin/dbstart /services/oracle/app/oracle/product/19.3/db
+ExecStop=/services/oracle/app/oracle/product/19.3/db/bin/dbshut /services/oracle/app/oracle/product/19.3/db
+
+[Install]
+WantedBy=multi-user.target
+
