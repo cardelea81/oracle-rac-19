@@ -464,3 +464,41 @@
     shell: oracleasm listdisks
   - name: Set ASM disks permisions
     shell: chown -R grid:dba  /dev/oracleasm/disks/*
+
+  - name: Create home dir dbz
+    file:
+     path: /services/oracle/dbz
+     state: directory
+
+  - name: add dbz user
+    user:
+     name: dbz
+     uid: 5433
+     group: oinstall
+     shell: /bin/bash
+     home: /services/oracle/dbz
+     state: present
+  - name: add extra group for dbz
+    user:
+     name: dbz
+     groups: oinstall,dba,backupdba,dgdba,kmdba,racdba,oper,asmdba,asmoper
+     append: yes
+
+  - name:  Permission for dbz
+    file:
+     path: /services/oracle/dbz
+     state: directory
+     recurse: yes
+     owner: dbz
+     group: oinstall
+
+  - name: Create a 2048-bit SSH key for user oracle
+    user:
+      name: dbz
+      generate_ssh_key: yes
+      ssh_key_bits: 2048
+      ssh_key_file: .ssh/id_rsa
+
+  - name: Set oracle user password
+    shell: echo dbz| passwd --stdin dbz
+
