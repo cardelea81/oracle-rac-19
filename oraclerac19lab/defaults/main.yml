@@ -14,7 +14,6 @@
      packages:
        - vim
        - mc
-       - ntp
        - telnet
        - bash-completion
        - net-tools
@@ -26,9 +25,7 @@
        - psacct
        - binutils
        - libX11
-       - compat-libcap1
        - libXau
-       - compat-libstdc++-33
        - libaio
        - gcc
        - libaio-devel
@@ -60,6 +57,7 @@
        - chrony  
        - smartmontools 
        - mc
+       - python3
        - unzip
        - unixODBC
        - unixODBC-devel
@@ -78,6 +76,14 @@
      key: "{{ lookup('file', lookup('env','HOME') + '/.ssh/id_rsa.pub') }}"
   - name: clean yum cache
     shell: yum clean all
+  - name: Link Pyhon3
+    ansible.builtin.file:
+      src: /usr/bin/python3
+      dest: /usr/bin/python
+      owner: root
+      group: root
+      state: link
+
   - name: be sure firewalld is disabled
     systemd: name=firewalld enabled=no
     tags:
@@ -135,10 +141,6 @@
     copy: src=etc/oracle19hosts.j2  dest=/etc/hosts
   - name: oracle limits
     copy: src=etc/oracle90-nproc.conf.j2 dest=/etc/security/limits.d/90-nproc.conf
-  - name: Add gpg key for oracle repo
-    get_url:
-     url: http://public-yum.oracle.com/RPM-GPG-KEY-oracle-ol7 
-     dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
   - name: kernel parm
     copy: src=oraclelimits.conf.j2  dest=/etc/security/limits.conf
   - name: kernel read
@@ -152,25 +154,31 @@
     shell: tuned-adm profile oracle
   - name: For the grub changes to take effect, run the following 
     shell: grub2-mkconfig -o /boot/grub2/grub.cfg
+  - name: Add gpg key for oracle repo
+    rpm_key:
+     key: https://yum.oracle.com/RPM-GPG-KEY-oracle-ol8
+     state: present
+
   - name: Install kmod-oracleasm
-    yum:
+    ansible.builtin.dnf:
      name: kmod-oracleasm
      state: present
   - name: Install oracleasm-support
-    yum:
-     name: ftp://172.25.250.30/pub/oracle19/rpm/oracleasm-support-2.1.11-2.el7.x86_64.rpm 
+    ansible.builtin.dnf:
+     name: ftp://172.25.250.30/pub/oracle19/rpm/oracleasm-support-2.1.12-1.el8.x86_64.rpm
      state: present
   - name: Install cvudisk
-    yum: 
+    ansible.builtin.dnf: 
      name: ftp://172.25.250.30/pub/oracle19/rpm/cvuqdisk-1.0.10-1.rpm
+     disable_gpg_check: true
      state: present
   - name: Install oracleasmlib
-    yum:
-     name: ftp://172.25.250.30/pub/oracle19/rpm/oracleasmlib-2.0.12-1.el7.x86_64.rpm
+    ansible.builtin.dnf:
+     name: ftp://172.25.250.30/pub/oracle19/rpm/oracleasmlib-2.0.17-1.el8.x86_64.rpm
      state: present
   - name: Install oracle-database-preinstall
-    yum:
-     name: ftp://172.25.250.30/pub/oracle19/rpm/oracle-database-preinstall-19c-1.0-1.el7.x86_64.rpm
+    ansible.builtin.dnf:
+     name: ftp://172.25.250.30/pub/oracle19/rpm/oracle-database-preinstall-19c-1.0-2.el8.x86_64.rpm
      state: present
   - name: Reboot cluster nodes
     reboot:
@@ -182,12 +190,9 @@
      test_command: whoami
 
   - name: be sure ntp is enabled
-    service: name=ntpd state=started enabled=yes
+    service: name=chronyd state=started enabled=yes
   - name: add ntp configuration file
-    copy: src=etc/ntprht.j2  dest=/etc/ntp.conf
-  - name: Sync ntp to storage.lab.dev.example.com
-    shell: service ntpd stop && ntpdate storage.lab.dev.example.com && service ntpd start
-    tags: ntp
+    copy: src=etc/ntprht.j2  dest=/etc/chrony.conf
   - name: Set time zone for lab nodes
     shell: timedatectl set-timezone Europe/Prague
   - name: Make sure Chrony is started up
@@ -327,7 +332,7 @@
   - name: Start and enable iscsi service
     shell: systemctl enable iscsi ; systemctl start iscsi
   - name: iSCSI Discovery 
-    shell: iscsiadm -m discovery -t sendtargets -p storage.lab.dev.example.com
+    shell: iscsiadm -m discovery -t sendtargets -p 192.168.100.30
   - name: iSCSI Initiator Sessions
     shell: iscsiadm -m node -l  
   - name: Run ASM driver configureation
@@ -382,21 +387,21 @@
      device: /dev/sdc
      number: 1
      state: present
-  - name: Create asm OCR_VOTING1 disk
-    shell: oracleasm createdisk OCR_VOTING1 /dev/sdc1
+  - name: Create asm FRA1 disk
+    shell: oracleasm createdisk FRA /dev/sdc1
 
   - parted:
      device: /dev/sdb
      number: 1
      state: present
-  - name: Create asm FRA1 disk
-    shell: oracleasm createdisk FRA1 /dev/sdb1
+  - name: Create asm DATA1 disk
+    shell: oracleasm createdisk DATA /dev/sdb1
   - parted:
-     device: /dev/sda
+     device: /dev/sdd
      number: 1
      state: present
-  - name: Create asm DATA1 disk
-    shell: oracleasm createdisk DATA1 /dev/sda1
+  - name: Create asm OCR_VOTING disk
+    shell: oracleasm createdisk OCR_VOTING /dev/sdd1
 
   - name: Set ASM disks permisions
     shell: chown -R grid:dba /dev/oracleasm/disks/*

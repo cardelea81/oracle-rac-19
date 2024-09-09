@@ -1,20 +1,7 @@
-# ntp.conf: Managed by puppet.
-#
-# Keep ntpd from panicking in the event of a large clock skew
-# when a VM guest is suspended and resumed.
-tinker panic 0
-
-
-# Permit time synchronization with our time source, but do not
-# permit the source to query or modify the service on this system.
-restrict default kod nomodify notrap nopeer noquery
-restrict -6 default kod nomodify notrap nopeer noquery
-restrict 127.0.0.1
-restrict -6 ::1
-
-
-server storage.lab.dev.example.com
-
-
-# Driftfile.
-driftfile /var/lib/ntp/drift
+server storage.lab.dev.example.com iburst
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+keyfile /etc/chrony.keys
+leapsectz right/UTC
+logdir /var/log/chrony
