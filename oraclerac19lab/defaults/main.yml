@@ -65,6 +65,15 @@
        - elfutils-libelf
        - elfutils-libelf-devel
        - tuned
+       - smartmontools
+       - dtrace-modules
+       - dtrace-modules-headers
+       - dtrace-modules-provider-headers
+       - dtrace-utils
+       - libnsl
+       - libnsl.i686 
+       - libnsl2
+       - libnsl2.i686
        - tuned-profiles-oracle
 
   

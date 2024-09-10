@@ -1,0 +1,25 @@
+- hosts: oracle-node01.lab.dev.example.com
+
+  tasks:
+
+  - name: Enable ssh access for user  grid
+    become: yes
+    become_user: grid
+    shell: |
+      set timeout 300
+      spawn  ssh-copy-id -i /services/oracle/gridhome/.ssh/id_rsa.pub oracle-node02.lab.dev.example.com
+      expect "Are you sure you want to continue connecting (yes/no/[fingerprint])?"
+      send "yes\n"
+
+      expect "\n oracle@oracle-node02.lab.dev.example.com's password:"
+      send "grid\n"
+      exit 0
+      
+      send -- "\r"
+      expect eof
+
+    args:
+      executable: /usr/bin/expect
+
+
+
