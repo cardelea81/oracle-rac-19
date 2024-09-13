@@ -66,10 +66,6 @@
        - elfutils-libelf-devel
        - tuned
        - smartmontools
-       - dtrace-modules
-       - dtrace-modules-headers
-       - dtrace-modules-provider-headers
-       - dtrace-utils
        - libnsl
        - libnsl.i686 
        - libnsl2
@@ -269,6 +265,7 @@
     file:
      path: /services/oracle/gridhome
      state: directory
+     recurse: yes
      owner: grid
      group: oinstall
       
@@ -327,7 +324,7 @@
      owner: dbz
      group: oinstall
 
-  - name: Create a 2048-bit SSH key for user oracle
+  - name: Create a 2048-bit SSH key for user dbz
     user:
       name: dbz
       generate_ssh_key: yes
@@ -472,7 +469,7 @@
   - name: List ASM disks
     shell: oracleasm listdisks
   - name: Set ASM disks permisions
-    shell: chown -R grid:dba  /dev/oracleasm/disks/*
+    shell: chown -R grid:dba  /dev/oracleasm/*
 
   - name: Create home dir dbz
     file:
@@ -508,6 +505,39 @@
       ssh_key_bits: 2048
       ssh_key_file: .ssh/id_rsa
 
-  - name: Set oracle user password
+  - name: Set dbz user password
     shell: echo dbz| passwd --stdin dbz
+
+
+- hosts: oracle-node02.lab.dev.example.com
+  tasks:
+  - name:  Permission fix oracle
+    file:
+     path: /services/oracle
+     state: directory
+     recurse: yes
+     owner: oracle
+     group: oinstall
+  - name: Permision for gridhome
+    file:
+     path: /services/oracle/gridhome
+     state: directory
+     recurse: yes
+     owner: grid
+     group: oinstall
+  - name: Permision fix grid
+    file:
+     path: /services/oracle/grid
+     state: directory
+     recurse: yes
+     owner: grid
+     group: oinstall
+
+  - name: Permision fix dbz
+    file:
+     path: /services/oracle/dbz
+     state: directory
+     recurse: yes
+     owner: dbz
+     group: oinstall
 
