@@ -1,0 +1,13 @@
+[Unit]
+Description=Load oracleasm Modules
+Requires=multipathd.service iscsid.service multi-user.target
+After=multipathd.service iscsid.service multi-user.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/oracleasm.init start_sysctl
+ExecStop=/usr/sbin/oracleasm.init stop_sysctl
+ExecReload=/usr/sbin/oracleasm.init restart_sysctl
+
+[Install]
+WantedBy=multi-user.target
