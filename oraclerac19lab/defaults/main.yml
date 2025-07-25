@@ -89,17 +89,17 @@
       group: root
       state: link
 
-  - name: be sure firewalld is disabled
-    systemd: name=firewalld enabled=no
-    tags:
-     - install
-     - firewalld
-  - name: be sure firewalld is stopped 
-    systemd: name=firewalld state=stopped
-    ignore_errors: yes
-    tags:
-     - install
-     - firewalld
+      #  - name: be sure firewalld is disabled
+      #    systemd: name=firewalld enabled=no
+      #tags:
+      #- install
+      #- firewalld
+      #  - name: be sure firewalld is stopped 
+      #systemd: name=firewalld state=stopped
+      #ignore_errors: yes
+      #tags:
+      #- install
+      #- firewalld
   - name: ensure SELINUX IS IN PERMISIVE MODE
     selinux: policy=targeted state=permissive
   - name: Create a directory gridhome
@@ -170,7 +170,7 @@
      state: present
   - name: Install oracleasm-support
     ansible.builtin.dnf:
-     name: http://192.168.122.1/oracle19/rpm/oracleasm-support-3.1.0-10.el8.x86_64.rpm
+     name: http://192.168.122.1/oracle19/rpm/oracleasm-support-2.1.12-1.el8.x86_64.rpm
      state: present
   - name: Install cvudisk
     ansible.builtin.dnf: 
@@ -179,7 +179,7 @@
      state: present
   - name: Install oracleasmlib
     ansible.builtin.dnf:
-     name: http://192.168.122.1/oracle19/rpm/oracleasmlib-3.1.0-6.el8.x86_64.rpm
+     name: http://192.168.122.1/oracle19/rpm/oracleasmlib-2.0.17-1.el8.x86_64.rpm
      state: present
   - name: Install oracle-database-preinstall
     ansible.builtin.dnf:
@@ -338,7 +338,7 @@
   - name: Start and enable iscsi service
     shell: systemctl enable iscsi ; systemctl start iscsi
   - name: iSCSI Discovery 
-    shell: iscsiadm -m discovery -t sendtargets -p 192.168.100.30
+    shell: iscsiadm -m discovery -t sendtargets -p 192.168.2.137
   - name: iSCSI Initiator Sessions
     shell: iscsiadm -m node -l  
   - name: Run ASM driver configureation
