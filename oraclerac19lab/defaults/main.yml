@@ -1,7 +1,7 @@
 ---
 # tasks file for oracle11gr2---
 - hosts: all
-
+    
   tasks:
 
 
@@ -11,6 +11,7 @@
     yum:
      name: "{{ packages }}"
     vars:
+     ansible_python_interpreter: /usr/bin/python3 
      packages:
        - vim
        - mc
@@ -170,20 +171,20 @@
      state: present
   - name: Install oracleasm-support
     ansible.builtin.dnf:
-     name: http://192.168.122.1/oracle19/rpm/oracleasm-support-2.1.12-1.el8.x86_64.rpm
+     name: http://172.25.250.30/oracle19/rpm/oracleasm-support-2.1.12-1.el8.x86_64.rpm
      state: present
   - name: Install cvudisk
     ansible.builtin.dnf: 
-     name: http://192.168.122.1/oracle19/rpm/cvuqdisk-1.0.10-1.rpm
+     name: http://172.25.250.30/oracle19/rpm/cvuqdisk-1.0.10-1.rpm
      disable_gpg_check: true
      state: present
   - name: Install oracleasmlib
     ansible.builtin.dnf:
-     name: http://192.168.122.1/oracle19/rpm/oracleasmlib-2.0.17-1.el8.x86_64.rpm
+     name: http://172.25.250.30/oracle19/rpm/oracleasmlib-2.0.17-1.el8.x86_64.rpm
      state: present
   - name: Install oracle-database-preinstall
     ansible.builtin.dnf:
-     name: http://192.168.122.1/oracle19/rpm/oracle-database-preinstall-19c-1.0-2.el8.x86_64.rpm
+     name: http://172.25.250.30/oracle19/rpm/oracle-database-preinstall-19c-1.0-2.el8.x86_64.rpm
      state: present
   - name: Reboot cluster nodes
     reboot:
@@ -338,7 +339,7 @@
   - name: Start and enable iscsi service
     shell: systemctl enable iscsi ; systemctl start iscsi
   - name: iSCSI Discovery 
-    shell: iscsiadm -m discovery -t sendtargets -p 192.168.2.137
+    shell: iscsiadm -m discovery -t sendtargets -p 192.168.10.30
   - name: iSCSI Initiator Sessions
     shell: iscsiadm -m node -l  
   - name: Run ASM driver configureation
@@ -413,7 +414,7 @@
     shell: chown -R grid:dba /dev/oracleasm/disks/*
   - name: Copy grid archive LINUX.X64_193000_grid_home.zip
     get_url:
-      url: http://192.168.122.1/oracle19/LINUX.X64_193000_grid_home.zip 
+      url: http://172.25.250.30/oracle19/LINUX.X64_193000_grid_home.zip 
       dest: /tmp
       owner: grid
       group: dba
@@ -427,7 +428,7 @@
 
   - name: Copy oracle archive LINUX.X64_193000_db_home.zip
     get_url:
-      url: http://192.168.122.1/oracle19/LINUX.X64_193000_db_home.zip
+      url: http://172.25.250.30/oracle19/LINUX.X64_193000_db_home.zip
       dest: /tmp
       owner: oracle
       group: dba
