@@ -1,8 +1,6 @@
 ---
 # vars file for oraclerac19
-
 ansible_python_interpreter: /usr/bin/python3
----
 # Oracle RAC 19c Configuration Variables
 
 # Oracle Software Configuration
@@ -82,12 +80,6 @@ oracle_users:
     secondary_groups: "oinstall,dba"
     home: "/services/oracle/orahome"
     password: "oracle"
-  dbz:
-    uid: 5433
-    primary_group: oinstall
-    secondary_groups: "oinstall,dba,backupdba,dgdba,kmdba,racdba,oper,asmdba,asmoper"
-    home: "/services/oracle/dbz"
-    password: "dbz"
 
 # Software Download URLs
 oracle_software_urls:

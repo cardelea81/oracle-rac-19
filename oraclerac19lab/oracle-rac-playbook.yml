@@ -7,10 +7,10 @@
     - vars/oracle_rac_vars.yml
   
   tasks:
-    - include_tasks: tasks/prerequisites.yml
+    - include_tasks: tasks/users_groups.yml
       tags: prerequisites
     
-    - include_tasks: tasks/users_groups.yml
+    - include_tasks: tasks/prerequisites.yml
       tags: users
     
     - include_tasks: tasks/storage_setup.yml
