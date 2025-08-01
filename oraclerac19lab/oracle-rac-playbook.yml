@@ -1,0 +1,75 @@
+---
+- name: Oracle RAC 19c Installation on Red Hat Linux
+  hosts: all
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/prerequisites.yml
+      tags: prerequisites
+    
+    - include_tasks: tasks/users_groups.yml
+      tags: users
+    
+    - include_tasks: tasks/storage_setup.yml
+      tags: storage
+    
+    - include_tasks: tasks/oracle_software.yml
+      tags: software
+
+- name: Configure Node Specific Settings for Node 1
+  hosts: oracle_rac_node1
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/node1_specific.yml
+      tags: node1
+
+- name: Configure Node Specific Settings for Node 2
+  hosts: oracle_rac_node2
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/node2_specific.yml
+      tags: node2
+
+- name: Oracle Grid Infrastructure Installation
+  hosts: oracle_rac_node1
+  become: yes
+  become_user: grid
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/grid_installation.yml
+      tags: grid_install
+
+- name: Oracle Database Software Installation
+  hosts: oracle_rac_node1
+  become: yes
+  become_user: oracle
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/database_installation.yml
+      tags: db_install
+
+- name: Post Installation Configuration
+  hosts: all
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/post_installation.yml
+      tags: post_install 
