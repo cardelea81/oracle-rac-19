@@ -1,0 +1,44 @@
+###############################################################################
+## Oracle Database 19c Response File
+###############################################################################
+
+oracle.install.responseFileVersion=/oracle/install/rspfmt_dbinstall_response_schema_v19.0.0
+
+# Installation Option
+oracle.install.option=INSTALL_DB_SWONLY
+
+# Unix Group
+UNIX_GROUP_NAME=oinstall
+
+# Inventory Location
+INVENTORY_LOCATION={{ oracle_inventory }}
+
+# Languages
+SELECTED_LANGUAGES=en
+
+# Oracle Home
+ORACLE_HOME={{ oracle_db_home }}
+
+# Oracle Base
+ORACLE_BASE={{ oracle_base }}
+
+# Installation Edition
+oracle.install.db.InstallEdition=EE
+
+# Custom Install
+oracle.install.db.OSDBA_GROUP=dba
+oracle.install.db.OSOPER_GROUP=oper
+oracle.install.db.OSBACKUPDBA_GROUP=backupdba
+oracle.install.db.OSDGDBA_GROUP=dgdba
+oracle.install.db.OSKMDBA_GROUP=kmdba
+oracle.install.db.OSRACDBA_GROUP=racdba
+
+# Root Script Execution
+oracle.install.db.rootconfig.executeRootScript=false
+
+# Cluster Nodes
+oracle.install.db.CLUSTER_NODES={% for node_name, node_info in oracle_rac_nodes.items() %}{{ node_info.hostname }}{% if not loop.last %},{% endif %}{% endfor %}
+
+# Security Updates
+SECURITY_UPDATES_VIA_MYORACLE_SUPPORT=false
+DECLINE_SECURITY_UPDATES=true 

@@ -1,0 +1,118 @@
+---
+# Post Installation Configuration
+
+- name: Create startup script for Oracle services
+  template:
+    src: templates/oracle_startup.sh.j2
+    dest: /usr/local/bin/oracle_startup.sh
+    owner: root
+    group: root
+    mode: '0755'
+  tags: startup_script
+
+- name: Create systemd service for Oracle
+  copy:
+    dest: /etc/systemd/system/oracle-rac.service
+    content: |
+      [Unit]
+      Description=Oracle RAC Services
+      After=network.target oracleasm.service
+      
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/oracle_startup.sh start
+      ExecStop=/usr/local/bin/oracle_startup.sh stop
+      RemainAfterExit=yes
+      User=root
+      
+      [Install]
+      WantedBy=multi-user.target
+  tags: oracle_service
+
+- name: Enable Oracle RAC service
+  systemd:
+    name: oracle-rac
+    enabled: yes
+    daemon_reload: yes
+  tags: enable_service
+
+- name: Setup SSH equivalency for grid user
+  shell: |
+    export ORACLE_HOME="{{ oracle_grid_home }}"
+    {{ oracle_grid_home }}/oui/prov/resources/scripts/sshUserSetup.sh -user grid -hosts "{{ groups['oracle_rac'] | map('extract', hostvars, 'ansible_fqdn') | join(' ') }}" -advanced -noPromptPassphrase
+  become_user: grid
+  when: inventory_hostname == groups['oracle_rac_node1'][0]
+  tags: ssh_equivalency_grid
+
+- name: Setup SSH equivalency for oracle user
+  shell: |
+    export ORACLE_HOME="{{ oracle_db_home }}"
+    {{ oracle_db_home }}/oui/prov/resources/scripts/sshUserSetup.sh -user oracle -hosts "{{ groups['oracle_rac'] | map('extract', hostvars, 'ansible_fqdn') | join(' ') }}" -advanced -noPromptPassphrase
+  become_user: oracle
+  when: inventory_hostname == groups['oracle_rac_node1'][0]
+  tags: ssh_equivalency_oracle
+
+- name: Check cluster resources
+  shell: |
+    export ORACLE_HOME="{{ oracle_grid_home }}"
+    {{ oracle_grid_home }}/bin/crsctl stat res -t
+  become_user: grid
+  register: cluster_resources
+  tags: cluster_resources
+
+- name: Display cluster resources
+  debug:
+    var: cluster_resources.stdout_lines
+  tags: cluster_resources
+
+- name: Create installation summary
+  copy:
+    dest: /root/oracle_rac_installation_summary.txt
+    content: |
+      Oracle RAC 19c Installation Summary
+      ==================================
+      
+      Installation Date: {{ ansible_date_time.date }}
+      Installation Time: {{ ansible_date_time.time }}
+      
+      Oracle Grid Infrastructure Home: {{ oracle_grid_home }}
+      Oracle Database Home: {{ oracle_db_home }}
+      Oracle Base: {{ oracle_base }}
+      
+      Cluster Name: {{ cluster_name }}
+      SCAN Name: {{ scan_name }}
+      
+      Nodes:
+      {% for node in groups['oracle_rac'] %}
+      - {{ hostvars[node]['ansible_fqdn'] }} ({{ hostvars[node]['public_ip'] }})
+      {% endfor %}
+      
+      ASM Disks:
+      - OCR_VOTING: {{ asm_disks.ocr_voting }}
+      - DATA: {{ asm_disks.data }}
+      - FRA: {{ asm_disks.fra }}
+      
+      Next Steps:
+      1. Verify cluster status: crsctl stat res -t
+      2. Create ASM diskgroups for DATA and FRA
+      3. Create Oracle RAC database using DBCA
+      4. Configure listeners and services
+      
+      Log files location:
+      - Grid Infrastructure: {{ oracle_inventory }}/logs
+      - Database: {{ oracle_base }}/diag
+  tags: installation_summary
+
+- name: Display installation completion message
+  debug:
+    msg: |
+      Oracle RAC 19c installation completed successfully!
+      
+      Summary file created at: /root/oracle_rac_installation_summary.txt
+      
+      Important next steps:
+      1. Verify cluster status
+      2. Create additional ASM diskgroups
+      3. Create Oracle RAC database
+      4. Configure services and listeners
+  tags: completion_message 

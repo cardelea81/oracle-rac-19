@@ -1,2 +1,34 @@
 ---
-# handlers file for oraclerac19
+# Handlers for Oracle RAC Installation
+
+- name: restart chronyd
+  systemd:
+    name: chronyd
+    state: restarted
+  tags: chrony
+
+- name: restart iscsi
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - iscsi
+    - iscsid
+  tags: iscsi
+
+- name: restart oracleasm
+  systemd:
+    name: oracleasm
+    state: restarted
+  tags: oracleasm
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  tags: systemd
+
+- name: restart network
+  systemd:
+    name: NetworkManager
+    state: restarted
+  tags: network 

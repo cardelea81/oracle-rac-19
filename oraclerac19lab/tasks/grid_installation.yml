@@ -1,0 +1,103 @@
+---
+# Oracle Grid Infrastructure Installation
+
+- name: Initialize grid_installed variable
+  set_fact:
+    grid_installed:
+      stat:
+        exists: false
+  tags: grid_check
+
+- name: Check if Grid Infrastructure is already installed
+  stat:
+    path: "{{ oracle_grid_home }}/bin/crsctl"
+  register: grid_installed
+  ignore_errors: yes
+  tags: grid_check
+
+- name: Display Grid Infrastructure status
+  debug:
+    msg: "Grid Infrastructure installed: {{ grid_installed.stat.exists | default(false) }}"
+  tags: grid_check
+
+- name: Install Oracle Grid Infrastructure
+  shell: |
+    export ORACLE_HOME="{{ oracle_grid_home }}"
+    export CV_ASSUME_DISTID=OEL7.6
+    export ORACLE_BASE="{{ grid_base }}"
+    cd {{ oracle_grid_home }}
+    ./gridSetup.sh -silent -responseFile {{ oracle_grid_home }}/install/response/grid.rsp
+  become_user: grid
+  register: grid_install_result
+  when: not (grid_installed.stat.exists | default(false))
+  async: 7200
+  poll: 30
+  tags: grid_install
+
+- name: Display Grid installation output
+  debug:
+    var: grid_install_result.stdout_lines
+  when: 
+    - not (grid_installed.stat.exists | default(false))
+    - grid_install_result is defined
+    - grid_install_result.stdout_lines is defined
+  tags: grid_install
+
+- name: Wait for Grid installation to complete
+  wait_for:
+    path: "{{ oracle_grid_home }}/install/root.sh"
+    timeout: 7200
+  when: not (grid_installed.stat.exists | default(false))
+  tags: grid_wait
+
+- name: Execute root.sh on first node
+  shell: "{{ oracle_grid_home }}/install/root.sh"
+  become_user: root
+  register: root_sh_result
+  when: 
+    - not (grid_installed.stat.exists | default(false))
+    - inventory_hostname == groups['oracle_rac_node1'][0]
+  tags: grid_root_script
+
+- name: Display root.sh output
+  debug:
+    var: root_sh_result.stdout_lines
+  when: 
+    - not (grid_installed.stat.exists | default(false))
+    - inventory_hostname == groups['oracle_rac_node1'][0]
+    - root_sh_result is defined
+    - root_sh_result.stdout_lines is defined
+  tags: grid_root_script
+
+- name: Pause for Grid Infrastructure startup
+  pause:
+    minutes: 5
+    prompt: "Waiting for Grid Infrastructure to start up completely"
+  when: not (grid_installed.stat.exists | default(false))
+  tags: grid_pause
+
+- name: Check cluster status
+  shell: |
+    export ORACLE_HOME="{{ oracle_grid_home }}"
+    {{ oracle_grid_home }}/bin/crsctl check cluster
+  become_user: grid
+  register: cluster_status
+  tags: cluster_check
+
+- name: Display cluster status
+  debug:
+    var: cluster_status.stdout_lines
+  tags: cluster_check
+
+- name: Check ASM status
+  shell: |
+    export ORACLE_HOME="{{ oracle_grid_home }}"
+    {{ oracle_grid_home }}/bin/srvctl status asm
+  become_user: grid
+  register: asm_status
+  tags: asm_check
+
+- name: Display ASM status
+  debug:
+    var: asm_status.stdout_lines
+  tags: asm_check 

@@ -1,0 +1,160 @@
+---
+# vars file for oraclerac19
+
+ansible_python_interpreter: /usr/bin/python3
+---
+# Oracle RAC 19c Configuration Variables
+
+# Oracle Software Configuration
+oracle_version: "19.3.0"
+oracle_grid_home: "/services/oracle/grid/19.3/grid_home"
+oracle_db_home: "/services/oracle/db/19.3/db_home"
+oracle_base: "/services/oracle"
+oracle_inventory: "/services/oracle/grid/oraInventory"
+grid_base: "/services/oracle/grid/gridbase"
+
+# Network Configuration
+cluster_name: "oracle"
+scan_name: "oracle-scan"
+scan_port: 1521
+domain_name: "lab.dev.example.com"
+
+# Node Configuration
+oracle_rac_nodes:
+  node1:
+    hostname: "oracle-node01.lab.dev.example.com"
+    public_ip: "172.25.250.67"
+    private_ip: "192.168.10.67"
+    vip_ip: "172.25.250.72"
+    vip_hostname: "oracle-node01-vip.lab.dev.example.com"
+  node2:
+    hostname: "oracle-node02.lab.dev.example.com"
+    public_ip: "172.25.250.68"
+    private_ip: "192.168.10.68"
+    vip_ip: "172.25.250.73"
+    vip_hostname: "oracle-node02-vip.lab.dev.example.com"
+
+# SCAN Configuration
+scan_ips:
+  - "172.25.250.69"
+  - "172.25.250.70"
+  - "172.25.250.71"
+
+# Storage Configuration
+iscsi_target_ip: "192.168.10.30"
+storage_private_ip: "172.25.250.137"
+
+# ASM Configuration
+asm_disks:
+  ocr_voting: "/dev/sdb"
+  data: "/dev/sdc"
+  fra: "/dev/sdd"
+
+# Network Interfaces
+network_interfaces:
+  public: "enp1s0:172.25.250.0:1"
+  asm: "enp2s0:192.168.10.0:4"
+  private: "enp3s0:192.168.10.0:2"
+
+# User and Group Configuration
+oracle_groups:
+  - name: oinstall
+    gid: 1012
+  - name: dba
+    gid: 1030
+  - name: asmdba
+    gid: 54333
+  - name: asmoper
+    gid: 54334
+  - name: asmadmin
+    gid: 54335
+
+oracle_users:
+  grid:
+    uid: 5431
+    primary_group: oinstall
+    secondary_groups: "oinstall,dba"
+    home: "/services/oracle/gridhome"
+    password: "grid"
+  oracle:
+    uid: 5432
+    primary_group: oinstall
+    secondary_groups: "oinstall,dba"
+    home: "/services/oracle/orahome"
+    password: "oracle"
+  dbz:
+    uid: 5433
+    primary_group: oinstall
+    secondary_groups: "oinstall,dba,backupdba,dgdba,kmdba,racdba,oper,asmdba,asmoper"
+    home: "/services/oracle/dbz"
+    password: "dbz"
+
+# Software Download URLs
+oracle_software_urls:
+  grid: "http://172.25.250.30/oracle19/LINUX.X64_193000_grid_home.zip"
+  database: "http://172.25.250.30/oracle19/LINUX.X64_193000_db_home.zip"
+  cvuqdisk: "http://172.25.250.30/oracle19/rpm/cvuqdisk-1.0.10-1.rpm"
+  oracleasm_support: "http://172.25.250.30/oracle19/rpm/oracleasm-support-2.1.12-1.el8.x86_64.rpm"
+  oracleasmlib: "http://172.25.250.30/oracle19/rpm/oracleasmlib-2.0.17-1.el8.x86_64.rpm"
+  oracle_preinstall: "http://172.25.250.30/oracle19/rpm/oracle-database-preinstall-19c-1.0-2.el8.x86_64.rpm"
+
+# Required Packages
+required_packages:
+  - vim
+  - mc
+  - telnet
+  - bash-completion
+  - net-tools
+  - nm-connection-editor
+  - wget
+  - bind-utils
+  - yum-utils
+  - sos
+  - psacct
+  - binutils
+  - libX11
+  - libXau
+  - libaio
+  - gcc
+  - libaio-devel
+  - gcc-c++
+  - libdmx
+  - glibc-devel
+  - glibc
+  - ksh
+  - make
+  - libgcc
+  - sysstat
+  - libstdc++
+  - xorg-x11-utils
+  - libstdc++-devel
+  - xorg-x11-xauth
+  - libXext
+  - libXv
+  - libXtst
+  - libXi
+  - libxcb
+  - libXt
+  - libXmu
+  - libXxf86misc
+  - libXxf86dga
+  - libXxf86vm
+  - nfs-utils
+  - iscsi-initiator-utils
+  - expect
+  - chrony
+  - smartmontools
+  - python3
+  - unzip
+  - unixODBC
+  - unixODBC-devel
+  - elfutils-libelf
+  - elfutils-libelf-devel
+  - tuned
+  - libnsl
+  - libnsl.i686
+  - libnsl2
+  - libnsl2.i686
+  - tuned-profiles-oracle
+  - xorg-x11-server-utils
+  - kmod-oracleasm 

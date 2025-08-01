@@ -1,0 +1,65 @@
+---
+# Oracle Database Software Installation
+
+- name: Check if Oracle Database software is already installed
+  stat:
+    path: "{{ oracle_db_home }}/bin/sqlplus"
+  register: db_installed
+  tags: db_check
+
+- name: Install Oracle Database Software
+  shell: |
+    export ORACLE_HOME="{{ oracle_db_home }}"
+    export ORACLE_BASE="{{ oracle_base }}"
+    cd {{ oracle_db_home }}
+    ./runInstaller -silent -responseFile {{ oracle_db_home }}/install/response/db.rsp
+  become_user: oracle
+  register: db_install_result
+  when: not db_installed.stat.exists
+  async: 3600
+  poll: 30
+  tags: db_install
+
+- name: Display Database installation output
+  debug:
+    var: db_install_result.stdout_lines
+  when: not db_installed.stat.exists and db_install_result is defined
+  tags: db_install
+
+- name: Wait for Database installation to complete
+  wait_for:
+    path: "{{ oracle_db_home }}/install/root.sh"
+    timeout: 3600
+  when: not db_installed.stat.exists
+  tags: db_wait
+
+- name: Execute Database root.sh script
+  shell: "{{ oracle_db_home }}/install/root.sh"
+  become_user: root
+  register: db_root_sh_result
+  when: 
+    - not db_installed.stat.exists
+    - inventory_hostname == groups['oracle_rac_node1'][0]
+  tags: db_root_script
+
+- name: Display Database root.sh output
+  debug:
+    var: db_root_sh_result.stdout_lines
+  when: 
+    - not db_installed.stat.exists
+    - inventory_hostname == groups['oracle_rac_node1'][0]
+    - db_root_sh_result is defined
+  tags: db_root_script
+
+- name: Check Oracle Database software installation
+  shell: |
+    export ORACLE_HOME="{{ oracle_db_home }}"
+    {{ oracle_db_home }}/bin/sqlplus -v
+  become_user: oracle
+  register: sqlplus_version
+  tags: db_version_check
+
+- name: Display Oracle Database version
+  debug:
+    var: sqlplus_version.stdout_lines
+  tags: db_version_check 

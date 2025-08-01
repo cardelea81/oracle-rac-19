@@ -1,0 +1,146 @@
+---
+# Node 1 Specific Configuration
+
+- name: Update bash profile for grid user on node1
+  template:
+    src: templates/grid_bashrc_node1.j2
+    dest: /services/oracle/gridhome/.bash_profile
+    owner: grid
+    group: oinstall
+    mode: '0644'
+  tags: grid_profile
+
+- name: Update bash profile for oracle user on node1
+  template:
+    src: templates/oracle_bashrc_node1.j2
+    dest: /services/oracle/orahome/.bash_profile
+    owner: oracle
+    group: oinstall
+    mode: '0644'
+  tags: oracle_profile
+
+- name: Update bash profile for dbz user on node1
+  template:
+    src: templates/dbz_bashrc_node1.j2
+    dest: /services/oracle/dbz/.bash_profile
+    owner: dbz
+    group: oinstall
+    mode: '0644'
+  tags: dbz_profile
+
+- name: Create partition for OCR/VOTING disk
+  parted:
+    device: "{{ asm_disks.ocr_voting }}"
+    number: 1
+    state: present
+  tags: ocr_partition
+
+- name: Create ASM OCR_VOTING disk
+  command: "oracleasm createdisk OCR_VOTING {{ asm_disks.ocr_voting }}1"
+  register: asm_ocr_create
+  changed_when: "'Writing disk header' in asm_ocr_create.stdout"
+  failed_when: 
+    - asm_ocr_create.rc != 0
+    - "'already labeled' not in asm_ocr_create.stderr"
+  tags: asm_ocr_disk
+
+- name: Create partition for DATA disk
+  parted:
+    device: "{{ asm_disks.data }}"
+    number: 1
+    state: present
+  tags: data_partition
+
+- name: Create ASM DATA disk
+  command: "oracleasm createdisk DATA {{ asm_disks.data }}1"
+  register: asm_data_create
+  changed_when: "'Writing disk header' in asm_data_create.stdout"
+  failed_when: 
+    - asm_data_create.rc != 0
+    - "'already labeled' not in asm_data_create.stderr"
+  tags: asm_data_disk
+
+- name: Create partition for FRA disk
+  parted:
+    device: "{{ asm_disks.fra }}"
+    number: 1
+    state: present
+  tags: fra_partition
+
+- name: Create ASM FRA disk
+  command: "oracleasm createdisk FRA {{ asm_disks.fra }}1"
+  register: asm_fra_create
+  changed_when: "'Writing disk header' in asm_fra_create.stdout"
+  failed_when: 
+    - asm_fra_create.rc != 0
+    - "'already labeled' not in asm_fra_create.stderr"
+  tags: asm_fra_disk
+
+- name: Set ASM disk permissions
+  command: chown -R grid:dba /dev/oracleasm/disks/*
+  tags: asm_permissions
+
+- name: Download Oracle Grid Infrastructure
+  get_url:
+    url: "{{ oracle_software_urls.grid }}"
+    dest: /tmp/LINUX.X64_193000_grid_home.zip
+    owner: grid
+    group: dba
+    mode: '0644'
+    timeout: 3600
+  tags: grid_download
+
+- name: Extract Oracle Grid Infrastructure
+  unarchive:
+    src: /tmp/LINUX.X64_193000_grid_home.zip
+    dest: "{{ oracle_grid_home }}"
+    remote_src: yes
+    owner: grid
+    group: dba
+  tags: grid_extract
+
+- name: Download Oracle Database Software
+  get_url:
+    url: "{{ oracle_software_urls.database }}"
+    dest: /tmp/LINUX.X64_193000_db_home.zip
+    owner: oracle
+    group: dba
+    mode: '0644'
+    timeout: 3600
+  tags: db_download
+
+- name: Extract Oracle Database Software
+  unarchive:
+    src: /tmp/LINUX.X64_193000_db_home.zip
+    dest: "{{ oracle_db_home }}"
+    remote_src: yes
+    owner: oracle
+    group: dba
+  tags: db_extract
+
+- name: Clean up downloaded archives
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/LINUX.X64_193000_grid_home.zip
+    - /tmp/LINUX.X64_193000_db_home.zip
+  tags: cleanup_archives
+
+- name: Copy Grid response file
+  template:
+    src: templates/grid.rsp.j2
+    dest: "{{ oracle_grid_home }}/install/response/grid.rsp"
+    owner: grid
+    group: oinstall
+    mode: '0644'
+  tags: grid_response
+
+- name: Copy Database response file
+  template:
+    src: templates/db.rsp.j2
+    dest: "{{ oracle_db_home }}/install/response/db.rsp"
+    owner: oracle
+    group: oinstall
+    mode: '0644'
+  tags: db_response 

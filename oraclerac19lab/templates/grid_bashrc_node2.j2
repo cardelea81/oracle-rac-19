@@ -1,0 +1,21 @@
+# .bash_profile
+
+# Get the aliases and functions
+if [ -f ~/.bashrc ]; then
+    . ~/.bashrc
+fi
+
+# User specific environment and startup programs
+
+# Oracle Grid Infrastructure Environment for Node 2
+export ORACLE_BASE={{ grid_base }}
+export ORACLE_HOME={{ oracle_grid_home }}
+export ORACLE_SID=+ASM2
+export PATH=$ORACLE_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH
+
+# Grid Infrastructure specific
+export GRID_HOME=$ORACLE_HOME
+export ASM_HOME=$ORACLE_HOME
+
+umask 022 

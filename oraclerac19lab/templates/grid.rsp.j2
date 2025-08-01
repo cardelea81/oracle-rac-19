@@ -1,0 +1,60 @@
+###############################################################################
+## Oracle Grid Infrastructure 19c Response File
+###############################################################################
+
+oracle.install.responseFileVersion=/oracle/install/rspfmt_crsinstall_response_schema_v19.0.0
+
+# Installation Options
+INVENTORY_LOCATION={{ oracle_inventory }}
+oracle.install.option=CRS_CONFIG
+ORACLE_BASE={{ grid_base }}
+
+# Groups
+oracle.install.asm.OSDBA=oinstall
+oracle.install.asm.OSOPER=oinstall
+oracle.install.asm.OSASM=oinstall
+
+# SCAN Configuration
+oracle.install.crs.config.scanType=LOCAL_SCAN
+oracle.install.crs.config.gpnp.scanName={{ scan_name }}
+oracle.install.crs.config.gpnp.scanPort={{ scan_port }}
+
+# Cluster Configuration
+oracle.install.crs.config.ClusterConfiguration=STANDALONE
+oracle.install.crs.config.configureAsExtendedCluster=false
+oracle.install.crs.config.clusterName={{ cluster_name }}
+oracle.install.crs.config.gpnp.configureGNS=false
+oracle.install.crs.config.autoConfigureClusterNodeVIP=false
+
+# Node Configuration
+oracle.install.crs.config.clusterNodes={% for node_name, node_info in oracle_rac_nodes.items() %}{{ node_info.hostname }}:{{ node_info.vip_hostname }}{% if not loop.last %},{% endif %}{% endfor %}
+
+# Network Interface List
+oracle.install.crs.config.networkInterfaceList={{ network_interfaces.public }},{{ network_interfaces.asm }},{{ network_interfaces.private }}
+
+# Grid Infrastructure Management Repository
+oracle.install.crs.configureGIMR=false
+oracle.install.asm.configureGIMRDataDG=false
+
+# Storage Configuration
+oracle.install.crs.config.storageOption=FLEX_ASM_STORAGE
+
+# IPMI Configuration
+oracle.install.crs.config.useIPMI=false
+
+# ASM Configuration
+oracle.install.asm.SYSASMPassword=
+oracle.install.asm.diskGroup.name=OCR_VOTING
+oracle.install.asm.diskGroup.redundancy=EXTERNAL
+oracle.install.asm.diskGroup.AUSize=4
+oracle.install.asm.diskGroup.disks=/dev/oracleasm/disks/OCR_VOTING
+oracle.install.asm.diskGroup.diskDiscoveryString=/dev/oracleasm/disks/*
+oracle.install.asm.monitorPassword=
+oracle.install.asm.configureAFD=false
+
+# Root Script Execution
+oracle.install.crs.rootconfig.executeRootScript=false
+oracle.install.crs.rootconfig.configMethod=ROOT
+
+# Management Options
+oracle.install.config.managementOption=NONE 

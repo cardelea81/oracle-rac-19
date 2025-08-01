@@ -1,0 +1,18 @@
+# .bash_profile
+
+# Get the aliases and functions
+if [ -f ~/.bashrc ]; then
+    . ~/.bashrc
+fi
+
+# User specific environment and startup programs
+
+# Oracle Database Environment for Node 1
+export ORACLE_BASE={{ oracle_base }}
+export ORACLE_HOME={{ oracle_db_home }}
+export ORACLE_SID=ORCL1
+export PATH=$ORACLE_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH
+export TNS_ADMIN=$ORACLE_HOME/network/admin
+
+umask 022 

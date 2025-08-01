@@ -1,0 +1,70 @@
+---
+# Node 2 Specific Configuration
+
+- name: Update bash profile for grid user on node2
+  template:
+    src: templates/grid_bashrc_node2.j2
+    dest: /services/oracle/gridhome/.bash_profile
+    owner: grid
+    group: oinstall
+    mode: '0644'
+  tags: grid_profile
+
+- name: Update bash profile for oracle user on node2
+  template:
+    src: templates/oracle_bashrc_node2.j2
+    dest: /services/oracle/orahome/.bash_profile
+    owner: oracle
+    group: oinstall
+    mode: '0644'
+  tags: oracle_profile
+
+- name: Update bash profile for dbz user on node2
+  template:
+    src: templates/dbz_bashrc_node2.j2
+    dest: /services/oracle/dbz/.bash_profile
+    owner: dbz
+    group: oinstall
+    mode: '0644'
+  tags: dbz_profile
+
+- name: Scan ASM disks on node2
+  command: oracleasm scandisks
+  tags: asm_scan
+
+- name: List ASM disks on node2
+  command: oracleasm listdisks
+  register: asm_list_node2
+  tags: asm_list
+
+- name: Set ASM disk permissions on node2
+  command: chown -R grid:dba /dev/oracleasm/*
+  tags: asm_permissions
+
+- name: Fix Oracle ASM service
+  copy:
+    dest: /usr/lib/systemd/system/oracleasm.service
+    content: |
+      [Unit]
+      Description=Oracle ASM Library Driver
+      After=local-fs.target
+      
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/sbin/oracleasm init
+      ExecStop=/usr/sbin/oracleasm exit
+      RemainAfterExit=yes
+      
+      [Install]
+      WantedBy=multi-user.target
+  tags: oracleasm_service
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+  tags: systemd_reload
+
+- name: Display ASM disks on node2
+  debug:
+    var: asm_list_node2.stdout_lines
+  tags: asm_list 

@@ -1,0 +1,122 @@
+---
+# Oracle Users and Groups Configuration
+
+- name: Create Oracle groups
+  group:
+    name: "{{ item.name }}"
+    gid: "{{ item.gid }}"
+    state: present
+  loop: "{{ oracle_groups }}"
+  tags: oracle_groups
+
+- name: Create Oracle directory structure
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0775'
+  loop:
+    - "{{ oracle_base }}"
+    - "{{ oracle_grid_home }}"
+    - "{{ grid_base }}"
+    - "{{ oracle_db_home }}"
+    - "/services/oracle/gridhome"
+    - "/services/oracle/orahome"
+    - "/services/oracle/dbz"
+  tags: oracle_directories
+
+- name: Create grid user
+  user:
+    name: grid
+    uid: "{{ oracle_users.grid.uid }}"
+    group: "{{ oracle_users.grid.primary_group }}"
+    groups: "{{ oracle_users.grid.secondary_groups }}"
+    shell: /bin/bash
+    home: "{{ oracle_users.grid.home }}"
+    state: present
+    append: yes
+  tags: grid_user
+
+- name: Create oracle user
+  user:
+    name: oracle
+    uid: "{{ oracle_users.oracle.uid }}"
+    group: "{{ oracle_users.oracle.primary_group }}"
+    groups: "{{ oracle_users.oracle.secondary_groups }}"
+    shell: /bin/bash
+    home: "{{ oracle_users.oracle.home }}"
+    state: present
+    append: yes
+  tags: oracle_user
+
+- name: Create dbz user
+  user:
+    name: dbz
+    uid: "{{ oracle_users.dbz.uid }}"
+    group: "{{ oracle_users.dbz.primary_group }}"
+    groups: "{{ oracle_users.dbz.secondary_groups }}"
+    shell: /bin/bash
+    home: "{{ oracle_users.dbz.home }}"
+    state: present
+    append: yes
+  tags: dbz_user
+
+- name: Set permissions for Oracle base directory
+  file:
+    path: "{{ oracle_base }}"
+    state: directory
+    recurse: yes
+    owner: oracle
+    group: oinstall
+    mode: '0775'
+  tags: oracle_permissions
+
+- name: Set permissions for Grid directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    recurse: yes
+    owner: grid
+    group: oinstall
+  loop:
+    - "{{ oracle_grid_home | dirname }}"
+    - "{{ oracle_users.grid.home }}"
+  tags: grid_permissions
+
+- name: Set permissions for dbz home directory
+  file:
+    path: "{{ oracle_users.dbz.home }}"
+    state: directory
+    recurse: yes
+    owner: dbz
+    group: oinstall
+  tags: dbz_permissions
+
+- name: Generate SSH keys for oracle user
+  user:
+    name: oracle
+    generate_ssh_key: yes
+    ssh_key_bits: 2048
+    ssh_key_file: .ssh/id_rsa
+  tags: oracle_ssh
+
+- name: Generate SSH keys for grid user
+  user:
+    name: grid
+    generate_ssh_key: yes
+    ssh_key_bits: 2048
+    ssh_key_file: .ssh/id_rsa
+  tags: grid_ssh
+
+- name: Generate SSH keys for dbz user
+  user:
+    name: dbz
+    generate_ssh_key: yes
+    ssh_key_bits: 2048
+    ssh_key_file: .ssh/id_rsa
+  tags: dbz_ssh
+
+- name: Set passwords for Oracle users
+  shell: "echo {{ item.value.password }} | passwd --stdin {{ item.key }}"
+  loop: "{{ oracle_users | dict2items }}"
+  no_log: true
+  tags: user_passwords 

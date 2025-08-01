@@ -1,0 +1,42 @@
+#!/bin/bash
+# Oracle RAC Startup/Shutdown Script
+
+ORACLE_HOME="{{ oracle_grid_home }}"
+ORACLE_BASE="{{ grid_base }}"
+DB_HOME="{{ oracle_db_home }}"
+
+case "$1" in
+start)
+    echo "Starting Oracle Clusterware..."
+    su - grid -c "$ORACLE_HOME/bin/crsctl start cluster"
+    
+    echo "Starting Oracle ASM..."
+    su - grid -c "$ORACLE_HOME/bin/srvctl start asm"
+    
+    echo "Starting Oracle Database..."
+    su - oracle -c "$DB_HOME/bin/srvctl start database -d ORCL"
+    ;;
+    
+stop)
+    echo "Stopping Oracle Database..."
+    su - oracle -c "$DB_HOME/bin/srvctl stop database -d ORCL"
+    
+    echo "Stopping Oracle ASM..."
+    su - grid -c "$ORACLE_HOME/bin/srvctl stop asm"
+    
+    echo "Stopping Oracle Clusterware..."
+    su - grid -c "$ORACLE_HOME/bin/crsctl stop cluster"
+    ;;
+    
+status)
+    echo "Cluster status:"
+    su - grid -c "$ORACLE_HOME/bin/crsctl stat res -t"
+    ;;
+    
+*)
+    echo "Usage: $0 {start|stop|status}"
+    exit 1
+    ;;
+esac
+
+exit 0 

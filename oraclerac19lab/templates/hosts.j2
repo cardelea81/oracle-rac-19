@@ -1,0 +1,27 @@
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+
+# Oracle RAC Configuration
+# Public Network
+{% for node_name, node_info in oracle_rac_nodes.items() %}
+{{ node_info.public_ip }}   {{ node_info.hostname }}
+{% endfor %}
+
+# Virtual IPs
+{% for node_name, node_info in oracle_rac_nodes.items() %}
+{{ node_info.vip_ip }}     {{ node_info.vip_hostname }}
+{% endfor %}
+
+# Private Network
+{% for node_name, node_info in oracle_rac_nodes.items() %}
+{{ node_info.private_ip }}  {{ node_info.hostname.replace('.lab.dev.example.com', '-priv.lab.dev.example.com') }}
+{% endfor %}
+
+# SCAN addresses
+{% for scan_ip in scan_ips %}
+{{ scan_ip }}   {{ scan_name }}.{{ domain_name }}
+{% endfor %}
+
+# Storage server
+{{ iscsi_target_ip }}   oracle-storage.{{ domain_name }}
+{{ storage_private_ip }}   oracle-storage-priv.{{ domain_name }} 

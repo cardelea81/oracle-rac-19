@@ -1,0 +1,61 @@
+---
+# Storage Configuration for Oracle RAC
+
+- name: Configure iSCSI initiator
+  template:
+    src: templates/initiatorname.iscsi.j2
+    dest: /etc/iscsi/initiatorname.iscsi
+    backup: yes
+  tags: iscsi_config
+
+- name: Start and enable iSCSI service
+  systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  loop:
+    - iscsi
+    - iscsid
+  tags: iscsi_service
+
+- name: Discover iSCSI targets
+  command: "iscsiadm -m discovery -t sendtargets -p {{ iscsi_target_ip }}"
+  register: iscsi_discovery
+  changed_when: "'New discovery record' in iscsi_discovery.stdout"
+  tags: iscsi_discovery
+
+- name: Login to iSCSI targets
+  command: iscsiadm -m node -l
+  register: iscsi_login
+  changed_when: "'successful' in iscsi_login.stdout"
+  tags: iscsi_login
+
+- name: Configure Oracle ASM
+  expect:
+    command: oracleasm configure -i
+    responses:
+      'Default user to own the driver interface \[\]:': 'grid'
+      'Default group to own the driver interface \[\]:': 'dba'
+      'Scan for Oracle ASM disks on boot \(y/n\) \[y\]:': 'y'
+    timeout: 30
+  tags: oracleasm_config
+
+- name: Initialize ASM
+  command: oracleasm init
+  register: asm_init
+  changed_when: "'Loading module' in asm_init.stdout or 'Configuring' in asm_init.stdout"
+  tags: asm_init
+
+- name: Scan for ASM disks
+  command: oracleasm scandisks
+  tags: asm_scan
+
+- name: List ASM disks
+  command: oracleasm listdisks
+  register: asm_list
+  tags: asm_list
+
+- name: Display current ASM disks
+  debug:
+    var: asm_list.stdout_lines
+  tags: asm_list 
