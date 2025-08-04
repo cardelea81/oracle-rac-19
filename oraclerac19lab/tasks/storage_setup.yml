@@ -63,6 +63,7 @@
   failed_when: 
     - asm_ocr_create.rc != 0
     - "'already labeled' not in asm_ocr_create.stderr"
+    - "'already labeled' not in asm_ocr_create.stdout"
   tags: asm_ocr_disk
 
 - name: Create partition for DATA disk
@@ -79,6 +80,7 @@
   failed_when: 
     - asm_data_create.rc != 0
     - "'already labeled' not in asm_data_create.stderr"
+    - "'already labeled' not in asm_data_create.stdout"
   tags: asm_data_disk
 
 - name: Create partition for FRA disk
@@ -95,12 +97,9 @@
   failed_when: 
     - asm_fra_create.rc != 0
     - "'already labeled' not in asm_fra_create.stderr"
+    - "'already labeled' not in asm_fra_create.stdout"
   tags: asm_fra_disk
 
-- name: Set ASM disk permissions
-  command: chown -R grid:dba /dev/oracleasm/disks/*
-  tags: asm_permissions
-  
 - name: Initialize ASM
   command: oracleasm init
   register: asm_init
@@ -110,6 +109,18 @@
 - name: Scan for ASM disks
   command: oracleasm scandisks
   tags: asm_scan
+
+- name: Check if ASM disks directory exists
+  stat:
+    path: /dev/oracleasm/disks
+  register: asm_disks_dir
+  tags: asm_permissions
+
+- name: Set ASM disk permissions
+  shell: chown -R grid:dba /dev/oracleasm/disks/*
+  when: asm_disks_dir.stat.exists and asm_disks_dir.stat.isdir
+  ignore_errors: yes
+  tags: asm_permissions
 
 - name: List ASM disks
   command: oracleasm listdisks
