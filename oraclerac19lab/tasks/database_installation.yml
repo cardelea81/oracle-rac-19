@@ -39,6 +39,8 @@
   register: db_root_sh_result
   when: 
     - not db_installed.stat.exists
+    - groups['oracle_rac_node1'] is defined
+    - groups['oracle_rac_node1'] | length > 0
     - inventory_hostname == groups['oracle_rac_node1'][0]
   tags: db_root_script
 
@@ -47,6 +49,8 @@
     var: db_root_sh_result.stdout_lines
   when: 
     - not db_installed.stat.exists
+    - groups['oracle_rac_node1'] is defined
+    - groups['oracle_rac_node1'] | length > 0
     - inventory_hostname == groups['oracle_rac_node1'][0]
     - db_root_sh_result is defined
   tags: db_root_script

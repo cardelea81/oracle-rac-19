@@ -56,6 +56,8 @@
   register: root_sh_result
   when: 
     - not (grid_installed.stat.exists | default(false))
+    - groups['oracle_rac_node1'] is defined
+    - groups['oracle_rac_node1'] | length > 0
     - inventory_hostname == groups['oracle_rac_node1'][0]
   tags: grid_root_script
 
@@ -64,6 +66,8 @@
     var: root_sh_result.stdout_lines
   when: 
     - not (grid_installed.stat.exists | default(false))
+    - groups['oracle_rac_node1'] is defined
+    - groups['oracle_rac_node1'] | length > 0
     - inventory_hostname == groups['oracle_rac_node1'][0]
     - root_sh_result is defined
     - root_sh_result.stdout_lines is defined

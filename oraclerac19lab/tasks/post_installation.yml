@@ -41,7 +41,10 @@
     export ORACLE_HOME="{{ oracle_grid_home }}"
     {{ oracle_grid_home }}/oui/prov/resources/scripts/sshUserSetup.sh -user grid -hosts "{{ groups['oracle_rac'] | map('extract', hostvars, 'ansible_fqdn') | join(' ') }}" -advanced -noPromptPassphrase
   become_user: grid
-  when: inventory_hostname == groups['oracle_rac_node1'][0]
+  when: 
+    - groups['oracle_rac_node1'] is defined
+    - groups['oracle_rac_node1'] | length > 0
+    - inventory_hostname == groups['oracle_rac_node1'][0]
   tags: ssh_equivalency_grid
 
 - name: Setup SSH equivalency for oracle user
@@ -49,7 +52,10 @@
     export ORACLE_HOME="{{ oracle_db_home }}"
     {{ oracle_db_home }}/oui/prov/resources/scripts/sshUserSetup.sh -user oracle -hosts "{{ groups['oracle_rac'] | map('extract', hostvars, 'ansible_fqdn') | join(' ') }}" -advanced -noPromptPassphrase
   become_user: oracle
-  when: inventory_hostname == groups['oracle_rac_node1'][0]
+  when: 
+    - groups['oracle_rac_node1'] is defined
+    - groups['oracle_rac_node1'] | length > 0
+    - inventory_hostname == groups['oracle_rac_node1'][0]
   tags: ssh_equivalency_oracle
 
 - name: Check cluster resources
