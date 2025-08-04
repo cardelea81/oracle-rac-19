@@ -1,0 +1,216 @@
+---
+# Oracle RAC 19c Installation - Improved Task Order
+# Author: Automated Oracle RAC Deployment
+# Version: 2.0
+
+# PHASE 1: SYSTEM PREREQUISITES (ALL NODES)
+- name: "Phase 1: System Prerequisites and Package Installation"
+  hosts: all
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/prerequisites.yml
+      tags: [prerequisites, phase1]
+
+# PHASE 2: USER AND GROUP SETUP (ALL NODES)  
+- name: "Phase 2: Oracle Users and Groups Setup"
+  hosts: all
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/users_groups.yml
+      tags: [users, phase2]
+
+# PHASE 3: STORAGE CONFIGURATION (ALL NODES)
+- name: "Phase 3: Storage and ASM Configuration"
+  hosts: all
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/storage_setup.yml
+      tags: [storage, phase3]
+
+# PHASE 4: NODE-SPECIFIC CONFIGURATION
+- name: "Phase 4a: Node 1 Specific Configuration"
+  hosts: oracle_rac_node1
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/node1_specific.yml
+      tags: [node1, phase4]
+
+- name: "Phase 4b: Node 2 Specific Configuration"
+  hosts: oracle_rac_node2
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/node2_specific.yml
+      tags: [node2, phase4]
+
+# PHASE 5: PRE-INSTALLATION VALIDATION
+- name: "Phase 5: Pre-Installation Validation"
+  hosts: all
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - name: Validate SSH connectivity between nodes
+      shell: |
+        su - grid -c "ssh -o BatchMode=yes grid@{{ item }} date"
+        su - oracle -c "ssh -o BatchMode=yes oracle@{{ item }} date"  
+      with_items: "{{ groups['oracle_rac'] | default([]) }}"
+      when: 
+        - groups['oracle_rac'] is defined
+        - item != inventory_hostname
+      ignore_errors: yes
+      tags: [validation, phase5]
+
+    - name: Verify ASM disks are available
+      command: oracleasm listdisks
+      register: asm_disks_check
+      tags: [validation, phase5]
+
+    - name: Display validation results
+      debug:
+        msg: "ASM Disks: {{ asm_disks_check.stdout_lines }}"
+      tags: [validation, phase5]
+
+# PHASE 6: ORACLE GRID INFRASTRUCTURE (NODE 1)
+- name: "Phase 6: Oracle Grid Infrastructure Installation"
+  hosts: oracle_rac_node1
+  become: yes
+  become_user: grid
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/grid_installation.yml
+      tags: [grid_install, phase6]
+
+# PHASE 7: GRID INFRASTRUCTURE NODE 2 ADDITION
+- name: "Phase 7: Add Node 2 to Grid Infrastructure"
+  hosts: oracle_rac_node2
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - name: Run Grid root.sh on Node 2
+      shell: "{{ oracle_grid_home }}/install/root.sh"
+      register: node2_root_sh
+      when: groups['oracle_rac_node2'] is defined
+      tags: [grid_node2, phase7]
+
+    - name: Display Node 2 root.sh output
+      debug:
+        var: node2_root_sh.stdout_lines
+      when: node2_root_sh is defined
+      tags: [grid_node2, phase7]
+
+# PHASE 8: ORACLE DATABASE SOFTWARE (NODE 1)
+- name: "Phase 8: Oracle Database Software Installation"
+  hosts: oracle_rac_node1
+  become: yes
+  become_user: oracle
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/database_installation.yml
+      tags: [db_install, phase8]
+
+# PHASE 9: CLUSTER VERIFICATION
+- name: "Phase 9: Cluster Verification and Status Check"
+  hosts: oracle_rac_node1
+  become: yes
+  become_user: grid
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - name: Check cluster status
+      shell: |
+        export ORACLE_HOME="{{ oracle_grid_home }}"
+        {{ oracle_grid_home }}/bin/crsctl check crs
+        {{ oracle_grid_home }}/bin/crsctl stat res -t
+      register: cluster_status
+      tags: [cluster_check, phase9]
+
+    - name: Display cluster status
+      debug:
+        var: cluster_status.stdout_lines
+      tags: [cluster_check, phase9]
+
+# PHASE 10: POST-INSTALLATION CONFIGURATION
+- name: "Phase 10: Post-Installation Configuration and Services"
+  hosts: all
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - include_tasks: tasks/post_installation.yml
+      tags: [post_install, phase10]
+
+# PHASE 11: FINAL VALIDATION AND SUMMARY
+- name: "Phase 11: Final Validation and Installation Summary"
+  hosts: oracle_rac_node1
+  become: yes
+  become_user: grid
+  vars_files:
+    - vars/oracle_rac_vars.yml
+  
+  tasks:
+    - name: Final cluster resource check
+      shell: |
+        export ORACLE_HOME="{{ oracle_grid_home }}"
+        {{ oracle_grid_home }}/bin/crsctl stat res -t -init
+      register: final_cluster_check
+      tags: [final_check, phase11]
+
+    - name: Create installation completion marker
+      file:
+        path: /tmp/oracle_rac_installation_complete
+        state: touch
+        owner: grid
+        group: oinstall
+      tags: [completion, phase11]
+
+    - name: Display installation completion message
+      debug:
+        msg: |
+          ===============================================
+          Oracle RAC 19c Installation Completed Successfully!
+          ===============================================
+          
+          Cluster Status:
+          {{ final_cluster_check.stdout_lines | join('\n') }}
+          
+          Next Steps:
+          1. Create ASM diskgroups: DATA, FRA
+          2. Create Oracle RAC database using DBCA
+          3. Configure additional services and listeners
+          4. Setup monitoring and backup strategies
+          
+          Installation marker: /tmp/oracle_rac_installation_complete
+          ===============================================
+      tags: [completion, phase11] 
