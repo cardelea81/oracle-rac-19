@@ -88,6 +88,86 @@
     ssh_key_file: .ssh/id_rsa
   tags: grid_ssh
 
+- name: Read oracle public key
+  slurp:
+    src: /services/oracle/orahome/.ssh/id_rsa.pub
+  register: oracle_public_key
+  tags: oracle_ssh_copy
+
+- name: Read grid public key  
+  slurp:
+    src: /services/oracle/gridhome/.ssh/id_rsa.pub
+  register: grid_public_key
+  tags: grid_ssh_copy
+
+- name: Copy oracle SSH public key to all other RAC nodes
+  authorized_key:
+    user: oracle
+    key: "{{ hostvars[item]['oracle_public_key']['content'] | b64decode }}"
+    state: present
+  with_items: "{{ groups['oracle_rac'] }}"
+  when: item != inventory_hostname
+  tags: oracle_ssh_copy
+
+- name: Copy grid SSH public key to all other RAC nodes
+  authorized_key:
+    user: grid
+    key: "{{ hostvars[item]['grid_public_key']['content'] | b64decode }}"
+    state: present
+  with_items: "{{ groups['oracle_rac'] }}"
+  when: item != inventory_hostname
+  tags: grid_ssh_copy
+
+- name: Add localhost to known_hosts for oracle user
+  known_hosts:
+    name: "{{ item }}"
+    key: "{{ lookup('pipe', 'ssh-keyscan -H ' + item) }}"
+    path: /services/oracle/orahome/.ssh/known_hosts
+  with_items: "{{ groups['oracle_rac'] }}"
+  become_user: oracle
+  tags: oracle_known_hosts
+
+- name: Add localhost to known_hosts for grid user
+  known_hosts:
+    name: "{{ item }}"
+    key: "{{ lookup('pipe', 'ssh-keyscan -H ' + item) }}"
+    path: /services/oracle/gridhome/.ssh/known_hosts
+  with_items: "{{ groups['oracle_rac'] }}"
+  become_user: grid
+  tags: grid_known_hosts
+
+- name: Test SSH connectivity for oracle user
+  shell: ssh -o BatchMode=yes -o ConnectTimeout=5 oracle@{{ item }} 'echo "SSH connection successful from $(hostname) to {{ item }}"'
+  with_items: "{{ groups['oracle_rac'] }}"
+  when: item != inventory_hostname
+  become_user: oracle
+  register: oracle_ssh_test
+  ignore_errors: yes
+  tags: ssh_test
+
+- name: Test SSH connectivity for grid user
+  shell: ssh -o BatchMode=yes -o ConnectTimeout=5 grid@{{ item }} 'echo "SSH connection successful from $(hostname) to {{ item }}"'
+  with_items: "{{ groups['oracle_rac'] }}"
+  when: item != inventory_hostname
+  become_user: grid
+  register: grid_ssh_test
+  ignore_errors: yes
+  tags: ssh_test
+
+- name: Display SSH test results for oracle
+  debug:
+    msg: "Oracle SSH test: {{ item.stdout | default(item.stderr) }}"
+  with_items: "{{ oracle_ssh_test.results }}"
+  when: oracle_ssh_test is defined and not item.skipped | default(false)
+  tags: ssh_test
+
+- name: Display SSH test results for grid  
+  debug:
+    msg: "Grid SSH test: {{ item.stdout | default(item.stderr) }}"
+  with_items: "{{ grid_ssh_test.results }}"
+  when: grid_ssh_test is defined and not item.skipped | default(false)
+  tags: ssh_test
+
 - name: Set passwords for Oracle users
   shell: "echo {{ item.value.password }} | passwd --stdin {{ item.key }}"
   loop: "{{ oracle_users | dict2items }}"
