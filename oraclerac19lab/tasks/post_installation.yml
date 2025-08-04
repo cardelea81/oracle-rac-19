@@ -36,6 +36,16 @@
     daemon_reload: yes
   tags: enable_service
 
+- name: Debug SSH equivalency variables
+  debug:
+    msg: |
+      inventory_hostname: {{ inventory_hostname }}
+      groups['oracle_rac_node1']: {{ groups['oracle_rac_node1'] | default('NOT DEFINED') }}
+      groups['oracle_rac']: {{ groups['oracle_rac'] | default('NOT DEFINED') }}
+      group_names: {{ group_names }}
+      ansible_fqdn: {{ ansible_fqdn | default('NOT SET') }}
+  tags: ssh_debug
+
 - name: Setup SSH equivalency for grid user
   shell: |
     export ORACLE_HOME="{{ oracle_grid_home }}"
@@ -46,7 +56,7 @@
     - groups['oracle_rac_node1'] | length > 0
     - groups['oracle_rac'] is defined
     - groups['oracle_rac'] | length > 0
-    - inventory_hostname == groups['oracle_rac_node1'][0]
+    - "'oracle_rac_node1' in group_names"
   tags: ssh_equivalency_grid
 
 - name: Setup SSH equivalency for oracle user
@@ -59,7 +69,7 @@
     - groups['oracle_rac_node1'] | length > 0
     - groups['oracle_rac'] is defined
     - groups['oracle_rac'] | length > 0
-    - inventory_hostname == groups['oracle_rac_node1'][0]
+    - "'oracle_rac_node1' in group_names"
   tags: ssh_equivalency_oracle
 
 - name: Check cluster resources

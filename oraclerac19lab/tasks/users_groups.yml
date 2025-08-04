@@ -191,3 +191,13 @@
   loop: "{{ oracle_users | dict2items }}"
   no_log: true
   tags: user_passwords 
+
+- name: Debug SSH equivalency variables
+  debug:
+    msg: |
+      inventory_hostname: {{ inventory_hostname }}
+      groups['oracle_rac_node1']: {{ groups['oracle_rac_node1'] | default('NOT DEFINED') }}
+      groups['oracle_rac']: {{ groups['oracle_rac'] | default('NOT DEFINED') }}
+      group_names: {{ group_names }}
+      ansible_fqdn: {{ ansible_fqdn | default('NOT SET') }}
+  tags: ssh_debug
