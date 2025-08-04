@@ -1,8 +1,8 @@
 [oracle_rac_node1]
-oracle-node01.lab.dev.example.com ansible_host=10.0.1.100 public_ip=10.0.1.100 private_ip=10.0.2.100
+oracle-node01.lab.dev.example.com ansible_host=172.25.250.67 public_ip=172.25.250.67 private_ip=192.168.10.67
 
 [oracle_rac_node2]
-oracle-node02.lab.dev.example.com ansible_host=10.0.1.101 public_ip=10.0.1.101 private_ip=10.0.2.101
+oracle-node02.lab.dev.example.com ansible_host=172.25.250.68 public_ip=172.25.250.68 private_ipivate_ip=192.168.10.68
 
 [oracle_rac:children]
 oracle_rac_node1
@@ -11,4 +11,3 @@ oracle_rac_node2
 [oracle_rac:vars]
 ansible_user=root
 ansible_ssh_private_key_file=~/.ssh/id_rsa
-
