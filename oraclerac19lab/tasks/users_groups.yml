@@ -201,81 +201,181 @@
       ansible_fqdn: {{ ansible_fqdn | default('NOT SET') }}
   tags: ssh_debug
 
-# Deploy and Execute Bash Profiles Script
-- name: Copy bash profiles script to target nodes
-  copy:
-    src: create_bash_profiles.sh
-    dest: /tmp/create_bash_profiles.sh
+
+
+# Create bash profiles directly - Simple and reliable approach
+- name: Create Oracle directory structure first
+  file:
+    path: "{{ item }}"
+    state: directory
     mode: '0755'
-    owner: root
-    group: root
-  tags: [copy_script, bash_profiles]
+    recurse: yes
+  with_items:
+    - /services/oracle
+    - /services/oracle/gridhome
+    - /services/oracle/orahome
+    - /services/oracle/grid/gridbase
+    - /services/oracle/grid/19.3/grid_home
+    - /services/oracle/db/19.3/db_home
+  tags: [create_dirs, bash_profiles]
 
-- name: Execute bash profiles script on node1
-  shell: /tmp/create_bash_profiles.sh 1
+- name: Create grid user bash profile directly (Node 1)
+  copy:
+    dest: /services/oracle/gridhome/.bash_profile
+    content: |
+      # .bash_profile for grid user - Node 1
+      
+      # Get the aliases and functions
+      if [ -f ~/.bashrc ]; then
+          . ~/.bashrc
+      fi
+      
+      # Oracle Grid Infrastructure Environment
+      export ORACLE_BASE=/services/oracle/grid/gridbase
+      export ORACLE_HOME=/services/oracle/grid/19.3/grid_home
+      export ORACLE_SID=+ASM1
+      export PATH=$ORACLE_HOME/bin:$PATH
+      export LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH
+      
+      # Grid Infrastructure specific
+      export GRID_HOME=$ORACLE_HOME
+      export ASM_HOME=$ORACLE_HOME
+      
+      umask 022
+    mode: '0644'
   when: "'oracle_rac_node1' in group_names"
-  register: node1_bash_result
-  tags: [execute_script, bash_profiles]
+  tags: [create_profiles, bash_profiles]
 
-- name: Execute bash profiles script on node2
-  shell: /tmp/create_bash_profiles.sh 2
+- name: Create grid user bash profile directly (Node 2)
+  copy:
+    dest: /services/oracle/gridhome/.bash_profile
+    content: |
+      # .bash_profile for grid user - Node 2
+      
+      # Get the aliases and functions
+      if [ -f ~/.bashrc ]; then
+          . ~/.bashrc
+      fi
+      
+      # Oracle Grid Infrastructure Environment
+      export ORACLE_BASE=/services/oracle/grid/gridbase
+      export ORACLE_HOME=/services/oracle/grid/19.3/grid_home
+      export ORACLE_SID=+ASM2
+      export PATH=$ORACLE_HOME/bin:$PATH
+      export LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH
+      
+      # Grid Infrastructure specific
+      export GRID_HOME=$ORACLE_HOME
+      export ASM_HOME=$ORACLE_HOME
+      
+      umask 022
+    mode: '0644'
   when: "'oracle_rac_node2' in group_names"
-  register: node2_bash_result
-  tags: [execute_script, bash_profiles]
+  tags: [create_profiles, bash_profiles]
 
-- name: Display script results for node1
-  debug:
-    var: node1_bash_result.stdout_lines
-  when: 
-    - "'oracle_rac_node1' in group_names"
-    - node1_bash_result is defined
-    - node1_bash_result.stdout_lines is defined
-  tags: [show_results, bash_profiles]
+- name: Create oracle user bash profile directly (Node 1)
+  copy:
+    dest: /services/oracle/orahome/.bash_profile
+    content: |
+      # .bash_profile for oracle user - Node 1
+      
+      # Get the aliases and functions
+      if [ -f ~/.bashrc ]; then
+          . ~/.bashrc
+      fi
+      
+      # Oracle Database Environment
+      export ORACLE_BASE=/services/oracle
+      export ORACLE_HOME=/services/oracle/db/19.3/db_home
+      export ORACLE_SID=rac1
+      export PATH=$ORACLE_HOME/bin:$PATH
+      export LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH
+      
+      # Oracle specific
+      export TNS_ADMIN=$ORACLE_HOME/network/admin
+      export ORA_NLS11=$ORACLE_HOME/nls/data
+      
+      umask 022
+    mode: '0644'
+  when: "'oracle_rac_node1' in group_names"
+  tags: [create_profiles, bash_profiles]
 
-- name: Display script results for node2
-  debug:
-    var: node2_bash_result.stdout_lines
-  when: 
-    - "'oracle_rac_node2' in group_names"
-    - node2_bash_result is defined
-    - node2_bash_result.stdout_lines is defined
-  tags: [show_results, bash_profiles]
+- name: Create oracle user bash profile directly (Node 2)
+  copy:
+    dest: /services/oracle/orahome/.bash_profile
+    content: |
+      # .bash_profile for oracle user - Node 2
+      
+      # Get the aliases and functions
+      if [ -f ~/.bashrc ]; then
+          . ~/.bashrc
+      fi
+      
+      # Oracle Database Environment
+      export ORACLE_BASE=/services/oracle
+      export ORACLE_HOME=/services/oracle/db/19.3/db_home
+      export ORACLE_SID=rac2
+      export PATH=$ORACLE_HOME/bin:$PATH
+      export LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LD_LIBRARY_PATH
+      
+      # Oracle specific
+      export TNS_ADMIN=$ORACLE_HOME/network/admin
+      export ORA_NLS11=$ORACLE_HOME/nls/data
+      
+      umask 022
+    mode: '0644'
+  when: "'oracle_rac_node2' in group_names"
+  tags: [create_profiles, bash_profiles]
 
+- name: Set ownership after users are created
+  shell: |
+    # Only set ownership if users exist
+    if id grid >/dev/null 2>&1; then
+      chown grid:oinstall /services/oracle/gridhome/.bash_profile 2>/dev/null || true
+      chown -R grid:oinstall /services/oracle/gridhome 2>/dev/null || true
+    fi
+    if id oracle >/dev/null 2>&1; then
+      chown oracle:oinstall /services/oracle/orahome/.bash_profile 2>/dev/null || true
+      chown -R oracle:oinstall /services/oracle/orahome 2>/dev/null || true
+    fi
+  ignore_errors: yes
+  tags: [set_ownership, bash_profiles]
+
+# Simple verification and testing
 - name: Verify bash profiles were created
   stat:
     path: "{{ item }}"
-  register: bash_profile_check
+  register: bash_profile_verification
   with_items:
     - /services/oracle/gridhome/.bash_profile
     - /services/oracle/orahome/.bash_profile
-  tags: [verify_profiles, bash_profiles]
+  tags: [verify_bash_profiles, bash_profiles]
 
 - name: Display bash profile verification results
   debug:
     msg: |
       File: {{ item.item }}
       Exists: {{ item.stat.exists }}
-      Size: {{ item.stat.size | default('N/A') }} bytes
-      Owner: {{ item.stat.pw_name | default('unknown') }}
-      Group: {{ item.stat.gr_name | default('unknown') }}
-  with_items: "{{ bash_profile_check.results }}"
-  tags: [verify_profiles, bash_profiles]
+      Size: {{ item.stat.size | default('0') }} bytes
+  with_items: "{{ bash_profile_verification.results }}"
+  tags: [verify_bash_profiles, bash_profiles]
 
-- name: Test grid user environment
-  shell: su - grid -c "source ~/.bash_profile && echo 'ORACLE_SID='$ORACLE_SID"
-  register: grid_env_test
+- name: Test bash profiles (when users exist)
+  shell: |
+    if id grid >/dev/null 2>&1; then
+      echo "Testing grid user:"
+      su - grid -c "source ~/.bash_profile 2>/dev/null && echo 'Grid ORACLE_SID='$ORACLE_SID" || echo "Grid profile test failed"
+    fi
+    if id oracle >/dev/null 2>&1; then
+      echo "Testing oracle user:"
+      su - oracle -c "source ~/.bash_profile 2>/dev/null && echo 'Oracle ORACLE_SID='$ORACLE_SID" || echo "Oracle profile test failed"
+    fi
+  register: profile_test_results
   ignore_errors: yes
-  tags: [test_profiles, bash_profiles]
+  tags: [test_bash_profiles, bash_profiles]
 
-- name: Test oracle user environment
-  shell: su - oracle -c "source ~/.bash_profile && echo 'ORACLE_SID='$ORACLE_SID"
-  register: oracle_env_test
-  ignore_errors: yes
-  tags: [test_profiles, bash_profiles]
-
-- name: Display environment test results
+- name: Display profile test results
   debug:
-    msg: |
-      Grid user test: {{ grid_env_test.stdout | default('FAILED - ' + (grid_env_test.stderr | default('Unknown error'))) }}
-      Oracle user test: {{ oracle_env_test.stdout | default('FAILED - ' + (oracle_env_test.stderr | default('Unknown error'))) }}
-  tags: [test_profiles, bash_profiles]
+    var: profile_test_results.stdout_lines
+  when: profile_test_results is defined
+  tags: [test_bash_profiles, bash_profiles]
