@@ -33,6 +33,14 @@
     state: permissive
   tags: selinux
 
+- name: Stop and disable firewalld
+  systemd:
+    name: firewalld
+    state: stopped
+    enabled: no
+  ignore_errors: yes
+  tags: firewall
+
 - name: Configure hosts file
   template:
     src: templates/hosts.j2
