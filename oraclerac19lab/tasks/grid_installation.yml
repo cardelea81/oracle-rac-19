@@ -105,23 +105,3 @@
   debug:
     var: asm_status.stdout_lines
   tags: asm_check 
-
-- name: Initialize ASM
-  command: oracleasm init
-  register: asm_init
-  changed_when: "'Loading module' in asm_init.stdout or 'Configuring' in asm_init.stdout"
-  tags: asm_init
-
-- name: Scan for ASM disks
-  command: oracleasm scandisks
-  tags: asm_scan
-
-- name: List ASM disks
-  command: oracleasm listdisks
-  register: asm_list
-  tags: asm_list
-
-- name: Display current ASM disks
-  debug:
-    var: asm_list.stdout_lines
-  tags: asm_list 

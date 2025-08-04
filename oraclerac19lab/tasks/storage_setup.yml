@@ -47,7 +47,60 @@
      expect eof
 
   args: 
-    executable: /usr/bin/expect 
+    executable: /usr/bin/expect
+
+- name: Create partition for OCR/VOTING disk
+  parted:
+    device: "{{ asm_disks.ocr_voting }}"
+    number: 1
+    state: present
+  tags: ocr_partition
+
+- name: Create ASM OCR_VOTING disk
+  command: "oracleasm createdisk OCR_VOTING {{ asm_disks.ocr_voting }}1"
+  register: asm_ocr_create
+  changed_when: "'Writing disk header' in asm_ocr_create.stdout"
+  failed_when: 
+    - asm_ocr_create.rc != 0
+    - "'already labeled' not in asm_ocr_create.stderr"
+  tags: asm_ocr_disk
+
+- name: Create partition for DATA disk
+  parted:
+    device: "{{ asm_disks.data }}"
+    number: 1
+    state: present
+  tags: data_partition
+
+- name: Create ASM DATA disk
+  command: "oracleasm createdisk DATA {{ asm_disks.data }}1"
+  register: asm_data_create
+  changed_when: "'Writing disk header' in asm_data_create.stdout"
+  failed_when: 
+    - asm_data_create.rc != 0
+    - "'already labeled' not in asm_data_create.stderr"
+  tags: asm_data_disk
+
+- name: Create partition for FRA disk
+  parted:
+    device: "{{ asm_disks.fra }}"
+    number: 1
+    state: present
+  tags: fra_partition
+
+- name: Create ASM FRA disk
+  command: "oracleasm createdisk FRA {{ asm_disks.fra }}1"
+  register: asm_fra_create
+  changed_when: "'Writing disk header' in asm_fra_create.stdout"
+  failed_when: 
+    - asm_fra_create.rc != 0
+    - "'already labeled' not in asm_fra_create.stderr"
+  tags: asm_fra_disk
+
+- name: Set ASM disk permissions
+  command: chown -R grid:dba /dev/oracleasm/disks/*
+  tags: asm_permissions
+  
 - name: Initialize ASM
   command: oracleasm init
   register: asm_init

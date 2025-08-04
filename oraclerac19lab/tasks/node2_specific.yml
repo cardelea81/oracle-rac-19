@@ -28,18 +28,7 @@
     mode: '0644'
   tags: dbz_profile
 
-- name: Scan ASM disks on node2
-  command: oracleasm scandisks
-  tags: asm_scan
 
-- name: List ASM disks on node2
-  command: oracleasm listdisks
-  register: asm_list_node2
-  tags: asm_list
-
-- name: Set ASM disk permissions on node2
-  command: chown -R grid:dba /dev/oracleasm/*
-  tags: asm_permissions
 
 - name: Fix Oracle ASM service
   copy:
@@ -64,7 +53,4 @@
     daemon_reload: yes
   tags: systemd_reload
 
-- name: Display ASM disks on node2
-  debug:
-    var: asm_list_node2.stdout_lines
-  tags: asm_list 
+ 
