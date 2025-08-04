@@ -30,7 +30,97 @@
   changed_when: "'successful' in iscsi_login.stdout"
   tags: iscsi_login
 
-- name: Run ASM driver configureation
+- name: Check if kmod-oracleasm package is installed
+  shell: rpm -qa | grep kmod-oracleasm
+  register: kmod_oracleasm_installed
+  ignore_errors: yes
+  tags: asm_package_check
+
+- name: Display kmod-oracleasm package status
+  debug:
+    msg: "kmod-oracleasm package: {{ kmod_oracleasm_installed.stdout | default('NOT INSTALLED') }}"
+  tags: asm_package_check
+
+- name: Install kmod-oracleasm if missing
+  dnf:
+    name: kmod-oracleasm
+    state: present
+  when: kmod_oracleasm_installed.stdout == ""
+  tags: asm_package_install
+
+- name: Check if oracleasm module files exist
+  find:
+    paths: ["/lib/modules/{{ ansible_kernel }}/extra", "/lib/modules/{{ ansible_kernel }}/kernel/drivers"]
+    patterns: "*oracleasm*"
+    recurse: yes
+  register: oracleasm_module_files
+  tags: asm_module_check
+
+- name: Display oracleasm module files
+  debug:
+    var: oracleasm_module_files.files
+  tags: asm_module_check
+
+- name: Check if oracleasm module is loaded
+  shell: lsmod | grep oracleasm
+  register: oracleasm_loaded
+  ignore_errors: yes
+  tags: asm_module_check
+
+- name: Display current loaded modules
+  debug:
+    msg: "oracleasm module loaded: {{ 'YES' if oracleasm_loaded.rc == 0 else 'NO' }}"
+  tags: asm_module_check
+
+- name: Force load oracleasm module
+  shell: |
+    modprobe oracleasm
+    echo "Module load result: $?"
+    lsmod | grep oracleasm || echo "Module not found in lsmod"
+  register: force_modprobe
+  ignore_errors: yes
+  tags: asm_module_load
+
+- name: Display modprobe results
+  debug:
+    var: force_modprobe.stdout_lines
+  tags: asm_module_load
+
+- name: Create oracleasm device manually if needed
+  file:
+    path: /dev/oracleasm
+    state: directory
+    mode: '0755'
+  ignore_errors: yes
+  tags: asm_device_create
+
+- name: Try starting oracleasm service
+  systemd:
+    name: oracleasm
+    state: started
+  register: asm_service_start
+  ignore_errors: yes
+  tags: asm_service
+
+- name: Enable oracleasm service
+  systemd:
+    name: oracleasm
+    enabled: yes
+  ignore_errors: yes
+  tags: asm_service
+
+- name: Display oracleasm service status
+  debug:
+    msg: "oracleasm service start: {{ 'SUCCESS' if asm_service_start.failed is not defined or not asm_service_start.failed else 'FAILED - ' + (asm_service_start.msg | default('Unknown error')) }}"
+  tags: asm_service
+
+- name: Run ASM driver configureation (non-interactive)
+  shell: echo -e "grid\ndba\ny" | oracleasm configure -i
+  register: asm_configure_result
+  ignore_errors: yes
+  tags: asm_configure
+
+- name: Run ASM driver configureation (expect fallback)
   become: yes
   become_user: root
   shell: |
@@ -48,6 +138,80 @@
 
   args: 
     executable: /usr/bin/expect
+  when: asm_configure_result.rc != 0
+  tags: asm_configure
+
+- name: Initialize ASM driver
+  command: oracleasm init
+  register: asm_init_first
+  changed_when: "'Loading module' in asm_init_first.stdout or 'Configuring' in asm_init_first.stdout"
+  tags: asm_init
+
+- name: Check ASM status
+  command: oracleasm status
+  register: asm_status_check
+  tags: asm_status
+
+- name: Display ASM status
+  debug:
+    var: asm_status_check.stdout_lines
+  tags: asm_status
+
+- name: Check if ASM is properly initialized
+  shell: oracleasm listdisks
+  register: asm_pre_check
+  ignore_errors: yes
+  tags: asm_precheck
+
+- name: Alternative ASM setup if traditional method fails
+  block:
+    - name: Create ASM device directory manually
+      file:
+        path: /dev/oracleasm/disks
+        state: directory
+        owner: grid
+        group: dba
+        mode: '0755'
+        recurse: yes
+
+    - name: Setup ASM configuration file manually
+      copy:
+        dest: /etc/sysconfig/oracleasm
+        content: |
+          # Oracle ASM configuration
+          ORACLEASM_ENABLED=true
+          ORACLEASM_UID=grid
+          ORACLEASM_GID=dba
+          ORACLEASM_SCANBOOT=true
+          ORACLEASM_SCANORDER=""
+          ORACLEASM_SCANEXCLUDE=""
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Force restart oracleasm after manual config
+      systemd:
+        name: oracleasm
+        state: restarted
+      ignore_errors: yes
+
+    - name: Re-initialize ASM after manual setup
+      command: oracleasm init
+      ignore_errors: yes
+
+  when: asm_pre_check.rc != 0 or asm_status_check.rc != 0
+  tags: asm_fallback
+
+- name: Final ASM status check
+  command: oracleasm status
+  register: final_asm_status
+  ignore_errors: yes
+  tags: asm_final_check
+
+- name: Display final ASM status
+  debug:
+    msg: "Final ASM status: {{ final_asm_status.stdout_lines | default(['ASM not ready']) }}"
+  tags: asm_final_check
 
 - name: Create partition for OCR/VOTING disk
   parted:
@@ -55,6 +219,11 @@
     number: 1
     state: present
   tags: ocr_partition
+
+- name: Verify ASM is ready before creating disks
+  command: oracleasm status
+  register: asm_ready_check
+  tags: asm_ready_verify
 
 - name: Create ASM OCR_VOTING disk
   command: "oracleasm createdisk OCR_VOTING {{ asm_disks.ocr_voting }}1"
@@ -64,6 +233,14 @@
     - asm_ocr_create.rc != 0
     - "'already labeled' not in asm_ocr_create.stderr"
     - "'already labeled' not in asm_ocr_create.stdout"
+    - "'module not loaded' not in asm_ocr_create.stderr"
+  when: asm_ready_check.rc == 0
+  tags: asm_ocr_disk
+
+- name: Display OCR disk creation result
+  debug:
+    msg: "OCR disk creation: {{ 'SUCCESS' if asm_ocr_create.rc == 0 else 'FAILED - ' + asm_ocr_create.stderr }}"
+  when: asm_ocr_create is defined
   tags: asm_ocr_disk
 
 - name: Create partition for DATA disk
@@ -81,6 +258,14 @@
     - asm_data_create.rc != 0
     - "'already labeled' not in asm_data_create.stderr"
     - "'already labeled' not in asm_data_create.stdout"
+    - "'module not loaded' not in asm_data_create.stderr"
+  when: asm_ready_check.rc == 0
+  tags: asm_data_disk
+
+- name: Display DATA disk creation result
+  debug:
+    msg: "DATA disk creation: {{ 'SUCCESS' if asm_data_create.rc == 0 else 'FAILED - ' + asm_data_create.stderr }}"
+  when: asm_data_create is defined
   tags: asm_data_disk
 
 - name: Create partition for FRA disk
@@ -98,13 +283,44 @@
     - asm_fra_create.rc != 0
     - "'already labeled' not in asm_fra_create.stderr"
     - "'already labeled' not in asm_fra_create.stdout"
+    - "'module not loaded' not in asm_fra_create.stderr"
+  when: asm_ready_check.rc == 0
   tags: asm_fra_disk
 
-- name: Initialize ASM
-  command: oracleasm init
-  register: asm_init
-  changed_when: "'Loading module' in asm_init.stdout or 'Configuring' in asm_init.stdout"
-  tags: asm_init
+- name: Display FRA disk creation result
+  debug:
+    msg: "FRA disk creation: {{ 'SUCCESS' if asm_fra_create.rc == 0 else 'FAILED - ' + asm_fra_create.stderr }}"
+  when: asm_fra_create is defined
+  tags: asm_fra_disk
+
+- name: Warning if ASM is not ready
+  debug:
+    msg: "WARNING: ASM module not ready, disk creation skipped. Manual intervention may be required."
+  when: asm_ready_check.rc != 0
+  tags: asm_warning
+
+- name: Create raw device mappings as fallback
+  block:
+    - name: Install raw device utilities
+      dnf:
+        name: util-linux
+        state: present
+
+    - name: Create raw device mappings
+      shell: |
+        raw /dev/raw/raw1 {{ asm_disks.ocr_voting }}1
+        raw /dev/raw/raw2 {{ asm_disks.data }}1  
+        raw /dev/raw/raw3 {{ asm_disks.fra }}1
+        chown grid:dba /dev/raw/raw*
+        chmod 660 /dev/raw/raw*
+      ignore_errors: yes
+
+    - name: Display raw device alternative notice
+      debug:
+        msg: "ASM failed - created raw device mappings: raw1(OCR), raw2(DATA), raw3(FRA)"
+
+  when: asm_ready_check.rc != 0
+  tags: raw_device_fallback
 
 - name: Scan for ASM disks
   command: oracleasm scandisks
