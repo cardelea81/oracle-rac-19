@@ -21,7 +21,6 @@
     - "{{ oracle_db_home }}"
     - "/services/oracle/gridhome"
     - "/services/oracle/orahome"
-    - "/services/oracle/dbz"
   tags: oracle_directories
 
 - name: Create grid user

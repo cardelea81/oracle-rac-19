@@ -1,6 +1,34 @@
 ---
 # Node 2 Specific Configuration
 
+- name: Debug node2 configuration
+  debug:
+    msg: |
+      Current user: {{ ansible_user_id | default('unknown') }}
+      Grid home directory: /services/oracle/gridhome
+      Oracle home directory: /services/oracle/orahome  
+      Group names: {{ group_names }}
+      Inventory hostname: {{ inventory_hostname }}
+  tags: debug_node2
+
+- name: Ensure grid home directory exists
+  file:
+    path: /services/oracle/gridhome
+    state: directory
+    owner: grid
+    group: oinstall
+    mode: '0755'
+  tags: grid_profile
+
+- name: Ensure oracle home directory exists
+  file:
+    path: /services/oracle/orahome
+    state: directory
+    owner: oracle
+    group: oinstall
+    mode: '0755'
+  tags: oracle_profile
+
 - name: Update bash profile for grid user on node2
   template:
     src: templates/grid_bashrc_node2.j2
@@ -19,14 +47,37 @@
     mode: '0644'
   tags: oracle_profile
 
-- name: Update bash profile for dbz user on node2
-  template:
-    src: templates/dbz_bashrc_node2.j2
-    dest: /services/oracle/dbz/.bash_profile
-    owner: dbz
-    group: oinstall
-    mode: '0644'
-  tags: dbz_profile
+- name: Verify bash profiles were created successfully
+  stat:
+    path: "{{ item }}"
+  register: bash_profiles_check
+  with_items:
+    - /services/oracle/gridhome/.bash_profile
+    - /services/oracle/orahome/.bash_profile
+  tags: verify_profiles
+
+- name: Display bash profile creation results
+  debug:
+    msg: |
+      Profile: {{ item.item }}
+      Exists: {{ item.stat.exists }}
+      Size: {{ item.stat.size | default('N/A') }} bytes
+      Owner: {{ item.stat.pw_name | default('unknown') }}
+      Group: {{ item.stat.gr_name | default('unknown') }}
+  with_items: "{{ bash_profiles_check.results }}"
+  tags: verify_profiles
+
+- name: Display sample grid profile content
+  shell: head -10 /services/oracle/gridhome/.bash_profile
+  register: grid_profile_content
+  ignore_errors: yes
+  tags: verify_profiles
+
+- name: Show grid profile content
+  debug:
+    var: grid_profile_content.stdout_lines
+  when: grid_profile_content is defined and grid_profile_content.rc == 0
+  tags: verify_profiles
 
 
 
