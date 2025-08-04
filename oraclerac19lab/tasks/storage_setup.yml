@@ -30,16 +30,24 @@
   changed_when: "'successful' in iscsi_login.stdout"
   tags: iscsi_login
 
-- name: Configure Oracle ASM
-  expect:
-    command: oracleasm configure -i
-    responses:
-      'Default user to own the driver interface \[\]:': 'grid'
-      'Default group to own the driver interface \[\]:': 'dba'
-      'Scan for Oracle ASM disks on boot \(y/n\) \[y\]:': 'y'
-    timeout: 30
-  tags: oracleasm_config
+- name: Run ASM driver configureation
+    become: yes
+    become_user: root
+    shell: |
+      spawn oracleasm configure -i
+       sleep 5
+       expect "\[Default user to own the driver interface []:\n" 
+       send -- "grid\r"
+       expect "\[Default group to own the driver interface []:]\n" 
+       send -- "dba\r"
+       expect "\[Scan for Oracle ASM disks on boot (y/n):]\n"
+       send -- "y\r"
+       expect "\[Writing Oracle ASM library driver configuration: done]\n"
+       send -- "\r"
+       expect eof
 
+    args: 
+      executable: /usr/bin/expect 
 - name: Initialize ASM
   command: oracleasm init
   register: asm_init
