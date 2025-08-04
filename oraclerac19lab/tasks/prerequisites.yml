@@ -1,6 +1,21 @@
 ---
 # Prerequisites for Oracle RAC Installation
 
+# Create essential Oracle groups first (needed for Oracle package installation)
+- name: Create oinstall group (required for Oracle packages)
+  group:
+    name: oinstall
+    gid: 1012
+    state: present
+  tags: essential_groups
+
+- name: Create dba group (required for Oracle packages)
+  group:
+    name: dba  
+    gid: 1030
+    state: present
+  tags: essential_groups
+
 - name: Install required packages
   yum:
     name: "{{ required_packages }}"
