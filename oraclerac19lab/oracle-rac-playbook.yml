@@ -15,9 +15,6 @@
     
     - include_tasks: tasks/storage_setup.yml
       tags: storage
-    
-    - include_tasks: tasks/oracle_software.yml
-      tags: software
 
 - name: Configure Node Specific Settings for Node 1
   hosts: oracle_rac_node1
