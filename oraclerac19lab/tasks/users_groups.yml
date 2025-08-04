@@ -200,3 +200,82 @@
       group_names: {{ group_names }}
       ansible_fqdn: {{ ansible_fqdn | default('NOT SET') }}
   tags: ssh_debug
+
+# Deploy and Execute Bash Profiles Script
+- name: Copy bash profiles script to target nodes
+  copy:
+    src: create_bash_profiles.sh
+    dest: /tmp/create_bash_profiles.sh
+    mode: '0755'
+    owner: root
+    group: root
+  tags: [copy_script, bash_profiles]
+
+- name: Execute bash profiles script on node1
+  shell: /tmp/create_bash_profiles.sh 1
+  when: "'oracle_rac_node1' in group_names"
+  register: node1_bash_result
+  tags: [execute_script, bash_profiles]
+
+- name: Execute bash profiles script on node2
+  shell: /tmp/create_bash_profiles.sh 2
+  when: "'oracle_rac_node2' in group_names"
+  register: node2_bash_result
+  tags: [execute_script, bash_profiles]
+
+- name: Display script results for node1
+  debug:
+    var: node1_bash_result.stdout_lines
+  when: 
+    - "'oracle_rac_node1' in group_names"
+    - node1_bash_result is defined
+    - node1_bash_result.stdout_lines is defined
+  tags: [show_results, bash_profiles]
+
+- name: Display script results for node2
+  debug:
+    var: node2_bash_result.stdout_lines
+  when: 
+    - "'oracle_rac_node2' in group_names"
+    - node2_bash_result is defined
+    - node2_bash_result.stdout_lines is defined
+  tags: [show_results, bash_profiles]
+
+- name: Verify bash profiles were created
+  stat:
+    path: "{{ item }}"
+  register: bash_profile_check
+  with_items:
+    - /services/oracle/gridhome/.bash_profile
+    - /services/oracle/orahome/.bash_profile
+  tags: [verify_profiles, bash_profiles]
+
+- name: Display bash profile verification results
+  debug:
+    msg: |
+      File: {{ item.item }}
+      Exists: {{ item.stat.exists }}
+      Size: {{ item.stat.size | default('N/A') }} bytes
+      Owner: {{ item.stat.pw_name | default('unknown') }}
+      Group: {{ item.stat.gr_name | default('unknown') }}
+  with_items: "{{ bash_profile_check.results }}"
+  tags: [verify_profiles, bash_profiles]
+
+- name: Test grid user environment
+  shell: su - grid -c "source ~/.bash_profile && echo 'ORACLE_SID='$ORACLE_SID"
+  register: grid_env_test
+  ignore_errors: yes
+  tags: [test_profiles, bash_profiles]
+
+- name: Test oracle user environment
+  shell: su - oracle -c "source ~/.bash_profile && echo 'ORACLE_SID='$ORACLE_SID"
+  register: oracle_env_test
+  ignore_errors: yes
+  tags: [test_profiles, bash_profiles]
+
+- name: Display environment test results
+  debug:
+    msg: |
+      Grid user test: {{ grid_env_test.stdout | default('FAILED - ' + (grid_env_test.stderr | default('Unknown error'))) }}
+      Oracle user test: {{ oracle_env_test.stdout | default('FAILED - ' + (oracle_env_test.stderr | default('Unknown error'))) }}
+  tags: [test_profiles, bash_profiles]
