@@ -44,6 +44,8 @@
   when: 
     - groups['oracle_rac_node1'] is defined
     - groups['oracle_rac_node1'] | length > 0
+    - groups['oracle_rac'] is defined
+    - groups['oracle_rac'] | length > 0
     - inventory_hostname == groups['oracle_rac_node1'][0]
   tags: ssh_equivalency_grid
 
@@ -55,6 +57,8 @@
   when: 
     - groups['oracle_rac_node1'] is defined
     - groups['oracle_rac_node1'] | length > 0
+    - groups['oracle_rac'] is defined
+    - groups['oracle_rac'] | length > 0
     - inventory_hostname == groups['oracle_rac_node1'][0]
   tags: ssh_equivalency_oracle
 
@@ -89,9 +93,13 @@
       SCAN Name: {{ scan_name }}
       
       Nodes:
+      {% if groups['oracle_rac'] is defined %}
       {% for node in groups['oracle_rac'] %}
-      - {{ hostvars[node]['ansible_fqdn'] }} ({{ hostvars[node]['public_ip'] }})
+      - {{ hostvars[node]['ansible_fqdn'] | default(node) }} ({{ hostvars[node]['public_ip'] | default('N/A') }})
       {% endfor %}
+      {% else %}
+      - Node information not available (oracle_rac group not defined)
+      {% endif %}
       
       ASM Disks:
       - OCR_VOTING: {{ asm_disks.ocr_voting }}
