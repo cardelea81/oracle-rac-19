@@ -2,7 +2,7 @@
 oracle-node01.lab.dev.example.com ansible_host=172.25.250.67 public_ip=172.25.250.67 private_ip=192.168.10.67
 
 [oracle_rac_node2]
-oracle-node02.lab.dev.example.com ansible_host=172.25.250.68 public_ip=172.25.250.68 private_ipivate_ip=192.168.10.68
+oracle-node02.lab.dev.example.com ansible_host=172.25.250.68 public_ip=172.25.250.68 private_ip=192.168.10.68
 
 [oracle_rac:children]
 oracle_rac_node1
