@@ -1,17 +1,73 @@
 ---
-- name: Prepare Oracle Grid Patch Files
+- name: Download and Prepare Oracle Grid Patch Files
   hosts: all
   become: yes
   vars:
-    patch_source_dir: /tmp/oracle_patches  # Where you upload/copy the patch files
+    patch_source_dir: /tmp/oracle_patches  # Where patch files will be downloaded
     grid_patch_dir: /services/oracle/gridhome/patch
+    patch_base_url: "http://172.25.250.30/oracle19/19.18.0.0"
     patches:
       - filename: p6880880_121010_Linux-x86-64.zip
         description: OPatch Utility
+        url: "{{ patch_base_url }}/p6880880_121010_Linux-x86-64.zip"
       - filename: p34762026_190000_Linux-x86-64.zip  
         description: Grid PSU Patch
+        url: "{{ patch_base_url }}/p34762026_190000_Linux-x86-64.zip"
 
   tasks:
+    # Step 1: Download patch files
+    - name: Create patch download directory
+      file:
+        path: "{{ patch_source_dir }}"
+        state: directory
+        mode: '0755'
+      tags: [download, prep_dirs]
+
+    - name: Test connectivity to patch server
+      uri:
+        url: "{{ patch_base_url }}"
+        method: GET
+        status_code: [200, 403, 404]
+      register: server_test
+      ignore_errors: yes
+      tags: [download, test_connection]
+
+    - name: Display server connectivity
+      debug:
+        msg: |
+          Server Test Results:
+          URL: {{ patch_base_url }}
+          Status: {{ server_test.status | default('FAILED') }}
+          {% if server_test.status is defined %}
+          ✓ Server is reachable
+          {% else %}
+          ✗ Server connection failed: {{ server_test.msg | default('Unknown error') }}
+          {% endif %}
+      tags: [download, test_connection]
+
+    - name: Download Oracle patch files
+      get_url:
+        url: "{{ item.url }}"
+        dest: "{{ patch_source_dir }}/{{ item.filename }}"
+        mode: '0644'
+        timeout: 300
+        validate_certs: no
+      with_items: "{{ patches }}"
+      register: download_results
+      tags: [download]
+
+    - name: Display download results
+      debug:
+        msg: |
+          Download Results for {{ item.item.filename }}:
+          Status: {{ 'SUCCESS' if item.changed else 'ALREADY EXISTS' if not item.failed else 'FAILED' }}
+          {% if item.failed is defined and item.failed %}
+          Error: {{ item.msg | default('Unknown error') }}
+          {% endif %}
+      with_items: "{{ download_results.results }}"
+      tags: [download]
+
+    # Step 2: Prepare patch files
     # Create patch directories
     - name: Create patch directories
       file:
@@ -104,26 +160,34 @@
       tags: [inventory]
 
     # Final preparation summary
-    - name: Preparation summary
+    - name: Download and preparation summary
       debug:
         msg: |
-          =============================================
-          Oracle Grid Patch Preparation Complete
-          =============================================
+          ========================================================
+          Oracle Grid Patch Download and Preparation Complete
+          ========================================================
           Node: {{ inventory_hostname }}
-          Patch Directory: {{ grid_patch_dir }}
+          Source Directory: {{ patch_source_dir }}
+          Grid Patch Directory: {{ grid_patch_dir }}
           
-          Files Ready:
+          Downloaded Files:
+          {% for item in download_results.results %}
+          - {{ item.item.filename }}: {{ 'SUCCESS' if item.changed else 'ALREADY EXISTS' if not item.failed else 'FAILED' }}
+          {% endfor %}
+          
+          Prepared Files:
           {% for item in copied_files_check.results %}
           - {{ item.item.filename }}: {{ 'READY' if item.stat.exists else 'MISSING' }}
           {% endfor %}
           
           Next Steps:
-          1. Ensure all nodes have the patches prepared
-          2. Run the grid patching playbook:
-             ansible-playbook grid-patching-playbook.yml -i tests/inventory
-          
-          Or run the simple version:
+          1. All nodes now have patches downloaded and prepared
+          2. Apply patches using one of these playbooks:
+             
+             Simple version (your exact commands):
              ansible-playbook simple-grid-patch.yml -i tests/inventory
-          =============================================
+             
+             Comprehensive version (with safety checks):
+             ansible-playbook grid-patching-playbook.yml -i tests/inventory
+          ========================================================
       tags: [summary] 

@@ -1,0 +1,119 @@
+---
+- name: Download Oracle Grid Patch Files
+  hosts: all
+  become: yes
+  vars:
+    patch_download_dir: /tmp/oracle_patches
+    patch_base_url: "http://172.25.250.30/oracle19/19.18.0.0"
+    patches:
+      - filename: p6880880_121010_Linux-x86-64.zip
+        description: OPatch Utility
+        url: "{{ patch_base_url }}/p6880880_121010_Linux-x86-64.zip"
+      - filename: p34762026_190000_Linux-x86-64.zip
+        description: Grid PSU Patch
+        url: "{{ patch_base_url }}/p34762026_190000_Linux-x86-64.zip"
+
+  tasks:
+    - name: Create patch download directory
+      file:
+        path: "{{ patch_download_dir }}"
+        state: directory
+        mode: '0755'
+      tags: [prep]
+
+    - name: Test connectivity to patch server
+      uri:
+        url: "{{ patch_base_url }}"
+        method: GET
+        status_code: [200, 403, 404]
+      register: server_test
+      ignore_errors: yes
+      tags: [test_connection]
+
+    - name: Display server connectivity
+      debug:
+        msg: |
+          Server Test Results:
+          URL: {{ patch_base_url }}
+          Status: {{ server_test.status | default('FAILED') }}
+          {% if server_test.status is defined %}
+          ✓ Server is reachable
+          {% else %}
+          ✗ Server connection failed: {{ server_test.msg | default('Unknown error') }}
+          {% endif %}
+      tags: [test_connection]
+
+    - name: Download Oracle patch files
+      get_url:
+        url: "{{ item.url }}"
+        dest: "{{ patch_download_dir }}/{{ item.filename }}"
+        mode: '0644'
+        timeout: 300
+        validate_certs: no
+      with_items: "{{ patches }}"
+      register: download_results
+      tags: [download]
+
+    - name: Display download results
+      debug:
+        msg: |
+          Download Results for {{ item.item.filename }}:
+          Status: {{ 'SUCCESS' if item.changed else 'ALREADY EXISTS' if not item.failed else 'FAILED' }}
+          {% if item.failed is defined and item.failed %}
+          Error: {{ item.msg | default('Unknown error') }}
+          {% endif %}
+      with_items: "{{ download_results.results }}"
+      tags: [download]
+
+    - name: Verify downloaded files
+      stat:
+        path: "{{ patch_download_dir }}/{{ item.filename }}"
+      register: verify_downloads
+      with_items: "{{ patches }}"
+      tags: [verify]
+
+    - name: Display verification results
+      debug:
+        msg: |
+          Patch File Verification:
+          {% for item in verify_downloads.results %}
+          {{ item.item.filename }} ({{ item.item.description }}):
+            Status: {{ 'READY ✓' if item.stat.exists else 'MISSING ✗' }}
+            {% if item.stat.exists %}
+            Size: {{ (item.stat.size / 1024 / 1024) | round(1) }} MB
+            Path: {{ patch_download_dir }}/{{ item.item.filename }}
+            {% endif %}
+          {% endfor %}
+      tags: [verify]
+
+    - name: Create download summary
+      shell: |
+        echo "Oracle Patch Download Summary - {{ inventory_hostname }}" > {{ patch_download_dir }}/download_summary.txt
+        echo "Downloaded on: $(date)" >> {{ patch_download_dir }}/download_summary.txt
+        echo "Server: {{ patch_base_url }}" >> {{ patch_download_dir }}/download_summary.txt
+        echo "" >> {{ patch_download_dir }}/download_summary.txt
+        echo "Downloaded Files:" >> {{ patch_download_dir }}/download_summary.txt
+        ls -lh {{ patch_download_dir }}/*.zip >> {{ patch_download_dir }}/download_summary.txt 2>/dev/null || echo "No zip files found" >> {{ patch_download_dir }}/download_summary.txt
+      tags: [summary]
+
+    - name: Display final summary
+      debug:
+        msg: |
+          =================================================
+          Oracle Patch Download Complete - {{ inventory_hostname }}
+          =================================================
+          Download Directory: {{ patch_download_dir }}
+          
+          Files Status:
+          {% for item in verify_downloads.results %}
+          - {{ item.item.filename }}: {{ 'READY' if item.stat.exists else 'MISSING' }}
+          {% endfor %}
+          
+          Next Steps:
+          1. Run patch preparation:
+             ansible-playbook patch-preparation.yml -i tests/inventory
+          
+          2. Apply patches:
+             ansible-playbook simple-grid-patch.yml -i tests/inventory
+          =================================================
+      tags: [summary] 
