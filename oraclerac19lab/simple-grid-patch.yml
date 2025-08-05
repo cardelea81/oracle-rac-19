@@ -3,8 +3,10 @@
   hosts: oracle_rac_node1  # Run on first node only
   become: yes
   become_user: grid
+  vars_files:
+    - vars/oracle_rac_vars.yml
   vars:
-    grid_home: /services/oracle/grid/19.3/grid_home
+    grid_home: "{{ oracle_grid_home }}"
     patch_home: /services/oracle/gridhome
 
   tasks:
@@ -17,24 +19,24 @@
     - name: Extract OPatch to Grid Home
       shell: |
         cd {{ grid_home }}
-        unzip {{ patch_home }}/patch/p6880880_121010_Linux-x86-64.zip
+        unzip {{ patch_home }}/patch/{{ oracle_patches[0].filename }}
       tags: [install_opatch]
 
     - name: Extract PSU patch to patch directory
       shell: |
         cd {{ patch_home }}
-        unzip patch/p34762026_190000_Linux-x86-64.zip -d .
+        unzip patch/{{ oracle_patches[1].filename }} -d .
       tags: [extract_psu]
 
     - name: Apply PSU using gridSetup.sh (relative path)
       shell: |
         cd {{ grid_home }}
-        ./gridSetup.sh -applyPSU {{ patch_home }}/34762026/
+        ./gridSetup.sh -applyPSU {{ patch_home }}/{{ oracle_patches[1].patch_number }}/
       tags: [apply_psu]
 
     - name: Alternative - Apply PSU using gridSetup.sh (absolute path)
       shell: |
-        {{ grid_home }}/gridSetup.sh -applyPSU {{ patch_home }}/34762026/
+        {{ grid_home }}/gridSetup.sh -applyPSU {{ patch_home }}/{{ oracle_patches[1].patch_number }}/
       tags: [apply_psu_alt]
       when: false  # Disabled by default
 

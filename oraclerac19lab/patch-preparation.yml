@@ -5,14 +5,8 @@
   vars:
     patch_source_dir: /tmp/oracle_patches  # Where patch files will be downloaded
     grid_patch_dir: /services/oracle/gridhome/patch
-    patch_base_url: "http://172.25.250.30/oracle19/19.18.0.0"
-    patches:
-      - filename: p6880880_121010_Linux-x86-64.zip
-        description: OPatch Utility
-        url: "{{ patch_base_url }}/p6880880_121010_Linux-x86-64.zip"
-      - filename: p34762026_190000_Linux-x86-64.zip  
-        description: Grid PSU Patch
-        url: "{{ patch_base_url }}/p34762026_190000_Linux-x86-64.zip"
+    patch_base_url: "{{ oracle_patch_urls.base_url }}"
+    patches: "{{ oracle_patches }}"
 
   tasks:
     # Step 1: Download patch files

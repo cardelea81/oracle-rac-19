@@ -1,26 +1,131 @@
 ---
-- name: Oracle Grid Infrastructure Patching
+- name: Oracle Grid Infrastructure - Download, Prepare, and Patch
   hosts: all
   become: yes
   vars_files:
     - vars/oracle_rac_vars.yml
   
   vars:
-    grid_home: /services/oracle/grid/19.3/grid_home
+    grid_home: "{{ oracle_grid_home }}"
     grid_user: grid
+    patch_source_dir: /tmp/oracle_patches
+    grid_patch_dir: /services/oracle/gridhome/patch
     patches_directory: /services/oracle/gridhome/patches
-    opatch_patch: p6880880_121010_Linux-x86-64.zip
-    psu_patch: p34762026_190000_Linux-x86-64.zip
-    psu_patch_number: "34762026"
+    patch_base_url: "{{ oracle_patch_urls.base_url }}"
+    opatch_patch: "{{ oracle_patches[0].filename }}"
+    psu_patch: "{{ oracle_patches[1].filename }}"
+    psu_patch_number: "{{ oracle_patches[1].patch_number }}"
+    patches: "{{ oracle_patches }}"
 
   tasks:
-    # Pre-patching checks
+    # ===== PHASE 1: DOWNLOAD PATCH FILES =====
+    - name: Create patch download directory
+      file:
+        path: "{{ patch_source_dir }}"
+        state: directory
+        mode: '0755'
+      tags: [download, phase1]
+
+    - name: Test connectivity to patch server
+      uri:
+        url: "{{ patch_base_url }}"
+        method: GET
+        status_code: [200, 403, 404]
+      register: server_test
+      ignore_errors: yes
+      tags: [download, phase1]
+
+    - name: Display server connectivity
+      debug:
+        msg: |
+          === PHASE 1: Download Patch Files ===
+          Server Test Results:
+          URL: {{ patch_base_url }}
+          Status: {{ server_test.status | default('FAILED') }}
+          {% if server_test.status is defined %}
+          ✓ Server is reachable
+          {% else %}
+          ✗ Server connection failed: {{ server_test.msg | default('Unknown error') }}
+          {% endif %}
+      tags: [download, phase1]
+
+    - name: Download Oracle patch files
+      get_url:
+        url: "{{ item.url }}"
+        dest: "{{ patch_source_dir }}/{{ item.filename }}"
+        mode: '0644'
+        timeout: 300
+        validate_certs: no
+      with_items: "{{ patches }}"
+      register: download_results
+      tags: [download, phase1]
+
+    - name: Display download results
+      debug:
+        msg: |
+          Download Results for {{ item.item.filename }}:
+          Status: {{ 'SUCCESS' if item.changed else 'ALREADY EXISTS' if not item.failed else 'FAILED' }}
+          {% if item.failed is defined and item.failed %}
+          Error: {{ item.msg | default('Unknown error') }}
+          {% endif %}
+      with_items: "{{ download_results.results }}"
+      tags: [download, phase1]
+
+    # ===== PHASE 2: PREPARE PATCH FILES =====
+    - name: Create grid patch directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ grid_user }}"
+        group: oinstall
+        mode: '0755'
+      with_items:
+        - "{{ grid_patch_dir }}"
+        - "{{ patches_directory }}"
+      tags: [prepare, phase2]
+
+    - name: Copy patch files to grid patch directory
+      copy:
+        src: "{{ patch_source_dir }}/{{ item.item.filename }}"
+        dest: "{{ grid_patch_dir }}/{{ item.item.filename }}"
+        owner: "{{ grid_user }}"
+        group: oinstall
+        mode: '0644'
+        remote_src: yes
+      with_items: "{{ download_results.results }}"
+      when: not item.failed
+      tags: [prepare, phase2]
+
+    - name: Verify prepared patch files
+      stat:
+        path: "{{ grid_patch_dir }}/{{ item.filename }}"
+      register: prepared_files_check
+      with_items: "{{ patches }}"
+      tags: [prepare, phase2]
+
+    - name: Display preparation results
+      debug:
+        msg: |
+          === PHASE 2: Patch Preparation Results ===
+          {% for item in prepared_files_check.results %}
+          {{ item.item.filename }} ({{ item.item.description }}):
+            Status: {{ 'READY ✓' if item.stat.exists else 'MISSING ✗' }}
+            {% if item.stat.exists %}
+            Size: {{ (item.stat.size / 1024 / 1024) | round(1) }} MB
+            Path: {{ grid_patch_dir }}/{{ item.item.filename }}
+            {% endif %}
+          {% endfor %}
+      tags: [prepare, phase2]
+
+    # ===== PHASE 3: PRE-PATCHING CHECKS =====
     - name: Pre-patching system checks
       shell: |
-        echo "=== Pre-Patching Checks ==="
+        echo "=== PHASE 3: Pre-Patching Checks ==="
         echo "Current date: $(date)"
         echo "Grid Home: {{ grid_home }}"
         echo "Grid user: {{ grid_user }}"
+        echo "Patch source: {{ patch_source_dir }}"
+        echo "Grid patch dir: {{ grid_patch_dir }}"
         
         # Check if Grid is running
         echo ""
@@ -36,44 +141,25 @@
         echo ""
         echo "=== Disk Space Check ==="
         df -h {{ grid_home }}
-        df -h {{ patches_directory | dirname }}
+        df -h {{ patch_source_dir }}
+        df -h {{ grid_patch_dir }}
+        
+        # Verify patch files are ready
+        echo ""
+        echo "=== Patch Files Ready Check ==="
+        ls -lh {{ grid_patch_dir }}/*.zip 2>/dev/null || echo "No patch files found in {{ grid_patch_dir }}"
       register: pre_patch_check
-      tags: [pre_check]
+      tags: [pre_check, phase3]
 
     - name: Display pre-patching check results
       debug:
         var: pre_patch_check.stdout_lines
-      tags: [pre_check]
+      tags: [pre_check, phase3]
 
-    # Create patches directory and copy patch files
-    - name: Create patches directory
-      file:
-        path: "{{ patches_directory }}"
-        state: directory
-        owner: "{{ grid_user }}"
-        group: oinstall
-        mode: '0755'
-      tags: [prep]
-
-    - name: Check if patch files exist
-      stat:
-        path: "{{ item }}"
-      register: patch_files_check
-      with_items:
-        - "patch/{{ opatch_patch }}"
-        - "patch/{{ psu_patch }}"
-      tags: [prep]
-
-    - name: Display patch files status
-      debug:
-        msg: |
-          OPatch file ({{ opatch_patch }}): {{ patch_files_check.results[0].stat.exists | default(false) }}
-          PSU file ({{ psu_patch }}): {{ patch_files_check.results[1].stat.exists | default(false) }}
-      tags: [prep]
-
-    # Stop Grid Infrastructure (if running)
+    # ===== PHASE 4: STOP GRID SERVICES =====
     - name: Stop Grid Infrastructure services
       shell: |
+        echo "=== PHASE 4: Stopping Grid Infrastructure Services ==="
         echo "Stopping Grid Infrastructure services..."
         sudo -u {{ grid_user }} {{ grid_home }}/bin/crsctl stop cluster -all || echo "Grid cluster stop failed or not running"
         sudo -u {{ grid_user }} {{ grid_home }}/bin/crsctl stop has || echo "HAS stop failed or not running"
@@ -84,18 +170,19 @@
         sudo -u {{ grid_user }} {{ grid_home }}/bin/crsctl stat res -t || echo "Grid services appear to be stopped"
       register: stop_grid
       become_user: "{{ grid_user }}"
-      tags: [stop_grid]
+      tags: [stop_grid, phase4]
       when: "'oracle_rac_node1' in group_names"  # Only run on first node
 
     - name: Display Grid stop results
       debug:
         var: stop_grid.stdout_lines
       when: stop_grid is defined
-      tags: [stop_grid]
+      tags: [stop_grid, phase4]
 
-    # Backup current OPatch
+    # ===== PHASE 5: BACKUP AND INSTALL OPATCH =====
     - name: Backup current OPatch directory
       shell: |
+        echo "=== PHASE 5: Backup and Install OPatch ==="
         if [ -d "{{ grid_home }}/OPatch" ]; then
           echo "Backing up existing OPatch..."
           cp -r {{ grid_home }}/OPatch {{ grid_home }}/OPatch.backup.$(date +%Y%m%d_%H%M%S)
@@ -105,23 +192,22 @@
         fi
       register: backup_opatch
       become_user: "{{ grid_user }}"
-      tags: [backup]
+      tags: [backup, phase5]
 
-    # Remove old OPatch and install new one
     - name: Remove old OPatch directory
       file:
         path: "{{ grid_home }}/OPatch"
         state: absent
-      tags: [install_opatch]
+      tags: [install_opatch, phase5]
 
     - name: Extract new OPatch to Grid Home
       unarchive:
-        src: "patch/{{ opatch_patch }}"
+        src: "{{ grid_patch_dir }}/{{ opatch_patch }}"
         dest: "{{ grid_home }}"
         owner: "{{ grid_user }}"
         group: oinstall
-        remote_src: no
-      tags: [install_opatch]
+        remote_src: yes
+      tags: [install_opatch, phase5]
 
     - name: Set OPatch permissions
       file:
@@ -131,11 +217,12 @@
         group: oinstall
         mode: '0755'
         recurse: yes
-      tags: [install_opatch]
+      tags: [install_opatch, phase5]
 
-    # Verify new OPatch installation
+    # ===== PHASE 6: VERIFY OPATCH INSTALLATION =====
     - name: Verify new OPatch installation
       shell: |
+        echo "=== PHASE 6: Verify OPatch Installation ==="
         echo "=== New OPatch Version ==="
         sudo -u {{ grid_user }} {{ grid_home }}/OPatch/opatch version
         
@@ -143,26 +230,26 @@
         echo "=== OPatch lsinventory ==="
         sudo -u {{ grid_user }} {{ grid_home }}/OPatch/opatch lsinventory || echo "lsinventory failed"
       register: verify_opatch
-      tags: [verify_opatch]
+      tags: [verify_opatch, phase6]
 
     - name: Display OPatch verification
       debug:
         var: verify_opatch.stdout_lines
-      tags: [verify_opatch]
+      tags: [verify_opatch, phase6]
 
-    # Extract PSU patch
+    # ===== PHASE 7: EXTRACT AND APPLY PSU PATCH =====
     - name: Extract PSU patch
       unarchive:
-        src: "patch/{{ psu_patch }}"
+        src: "{{ grid_patch_dir }}/{{ psu_patch }}"
         dest: "{{ patches_directory }}"
         owner: "{{ grid_user }}"
         group: oinstall
-        remote_src: no
-      tags: [extract_psu]
+        remote_src: yes
+      tags: [extract_psu, phase7]
 
-    # Apply PSU patch using gridSetup.sh
     - name: Apply PSU patch using gridSetup.sh
       shell: |
+        echo "=== PHASE 7: Apply PSU Patch ==="
         cd {{ grid_home }}
         echo "Starting PSU application..."
         echo "Patch location: {{ patches_directory }}/{{ psu_patch_number }}"
@@ -170,6 +257,7 @@
         # Check if patch directory exists
         if [ -d "{{ patches_directory }}/{{ psu_patch_number }}" ]; then
           echo "Patch directory found. Applying PSU..."
+          echo "Command: ./gridSetup.sh -silent -applyPSU {{ patches_directory }}/{{ psu_patch_number }}"
           ./gridSetup.sh -silent -applyPSU {{ patches_directory }}/{{ psu_patch_number }}
         else
           echo "ERROR: Patch directory not found!"
@@ -179,19 +267,19 @@
         fi
       register: apply_psu
       become_user: "{{ grid_user }}"
-      tags: [apply_psu]
+      tags: [apply_psu, phase7]
       when: "'oracle_rac_node1' in group_names"  # Apply on first node first
 
     - name: Display PSU application results
       debug:
         var: apply_psu.stdout_lines
       when: apply_psu is defined
-      tags: [apply_psu]
+      tags: [apply_psu, phase7]
 
-    # Post-patch verification
+    # ===== PHASE 8: POST-PATCH VERIFICATION =====
     - name: Post-patch verification
       shell: |
-        echo "=== Post-Patch Verification ==="
+        echo "=== PHASE 8: Post-Patch Verification ==="
         echo "OPatch version:"
         sudo -u {{ grid_user }} {{ grid_home }}/OPatch/opatch version
         
@@ -203,16 +291,17 @@
         echo "=== Inventory Summary ==="
         sudo -u {{ grid_user }} {{ grid_home }}/OPatch/opatch lsinventory -summary
       register: post_patch_verify
-      tags: [verify]
+      tags: [verify, phase8]
 
     - name: Display post-patch verification
       debug:
         var: post_patch_verify.stdout_lines
-      tags: [verify]
+      tags: [verify, phase8]
 
-    # Start Grid Infrastructure services
+    # ===== PHASE 9: START GRID INFRASTRUCTURE SERVICES =====
     - name: Start Grid Infrastructure services
       shell: |
+        echo "=== PHASE 9: Starting Grid Infrastructure Services ==="
         echo "Starting Grid Infrastructure services..."
         sudo -u {{ grid_user }} {{ grid_home }}/bin/crsctl start has
         sleep 30
@@ -225,33 +314,50 @@
         sudo -u {{ grid_user }} {{ grid_home }}/bin/crsctl stat res -t
       register: start_grid
       become_user: "{{ grid_user }}"
-      tags: [start_grid]
+      tags: [start_grid, phase9]
       when: "'oracle_rac_node1' in group_names"
 
     - name: Display Grid start results
       debug:
         var: start_grid.stdout_lines
       when: start_grid is defined
-      tags: [start_grid]
+      tags: [start_grid, phase9]
 
-    # Final summary
-    - name: Patching summary
+    # ===== PHASE 10: FINAL SUMMARY =====
+    - name: Complete patching summary
       debug:
         msg: |
-          ===============================================
-          Oracle Grid Infrastructure Patching Summary
-          ===============================================
+          ================================================================
+          Oracle Grid Infrastructure Complete Patching Summary
+          ================================================================
           Node: {{ inventory_hostname }}
-          Grid Home: {{ grid_home }}
-          OPatch Patch: {{ opatch_patch }}
-          PSU Patch: {{ psu_patch }}
-          PSU Number: {{ psu_patch_number }}
           
-          Status: {% if apply_psu is defined and apply_psu.rc == 0 %}SUCCESS{% else %}PENDING/CHECK LOGS{% endif %}
+          DOWNLOAD PHASE:
+          - Patch Server: {{ patch_base_url }}
+          - Download Directory: {{ patch_source_dir }}
+          - Downloaded: {% for item in download_results.results %}{{ item.item.filename }}{% if not loop.last %}, {% endif %}{% endfor %}
+          
+          PREPARATION PHASE:
+          - Grid Patch Directory: {{ grid_patch_dir }}
+          - Files Prepared: {% for item in prepared_files_check.results %}{{ item.item.filename }}{% if not loop.last %}, {% endif %}{% endfor %}
+          
+          PATCHING PHASE:
+          - Grid Home: {{ grid_home }}
+          - OPatch Updated: {{ opatch_patch }}
+          - PSU Applied: {{ psu_patch }} ({{ psu_patch_number }})
+          - Patch Status: {% if apply_psu is defined and apply_psu.rc == 0 %}SUCCESS ✓{% else %}PENDING/CHECK LOGS{% endif %}
+          
+          FINAL STATUS:
+          {% if start_grid is defined %}
+          - Grid Services: RESTARTED
+          {% else %}
+          - Grid Services: CHECK MANUALLY
+          {% endif %}
           
           Next Steps:
-          1. Verify cluster status: crsctl stat res -t
+          1. Verify cluster status: sudo -u grid {{ grid_home }}/bin/crsctl stat res -t
           2. Apply same patch to other nodes if this is node 1
           3. Check database status after all nodes patched
-          ===============================================
-      tags: [summary] 
+          4. Review logs in {{ grid_home }}/cfgtoollogs/
+          ================================================================
+      tags: [summary, phase10] 

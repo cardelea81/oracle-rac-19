@@ -90,6 +90,27 @@ oracle_software_urls:
   oracleasmlib: "http://172.25.250.30/oracle19/rpm/oracleasmlib-2.0.17-1.el8.x86_64.rpm"
   oracle_preinstall: "http://172.25.250.30/oracle19/rpm/oracle-database-preinstall-19c-1.0-2.el8.x86_64.rpm"
 
+# Oracle Patch Download URLs
+oracle_patch_urls:
+  base_url: "http://172.25.250.30/oracle19/19.18.0.0"
+  opatch: "http://172.25.250.30/oracle19/19.18.0.0/p6880880_121010_Linux-x86-64.zip"
+  grid_psu: "http://172.25.250.30/oracle19/19.18.0.0/p34762026_190000_Linux-x86-64.zip"
+  
+# Patch Information
+oracle_patches:
+  - filename: "p6880880_121010_Linux-x86-64.zip"
+    description: "OPatch Utility Update"
+    patch_number: "6880880"
+    version: "12.1.0.1.0"
+    url: "{{ oracle_patch_urls.opatch }}"
+    target: "grid_home"
+  - filename: "p34762026_190000_Linux-x86-64.zip"
+    description: "Grid Infrastructure PSU 19.18.0.0"
+    patch_number: "34762026"
+    version: "19.18.0.0"
+    url: "{{ oracle_patch_urls.grid_psu }}"
+    target: "grid_home"
+
 # Required Packages
 required_packages:
   - vim
