@@ -1,0 +1,120 @@
+---
+- name: Enable SSH access for Oracle RAC users using ssh-copy-id
+  hosts: all
+  become: yes
+  vars_files:
+    - vars/oracle_rac_vars.yml
+
+  tasks:
+    # First ensure SSH keys exist
+    - name: Ensure SSH keys exist for grid user
+      openssh_keypair:
+        path: /services/oracle/gridhome/.ssh/id_rsa
+        type: rsa
+        size: 2048
+        owner: grid
+        group: oinstall
+        mode: '0600'
+      tags: [ssh_keys]
+
+    - name: Ensure SSH keys exist for oracle user
+      openssh_keypair:
+        path: /services/oracle/orahome/.ssh/id_rsa
+        type: rsa
+        size: 2048
+        owner: oracle
+        group: oinstall
+        mode: '0600'
+      tags: [ssh_keys]
+
+    # SSH copy for grid user to all other nodes
+    - name: Enable ssh access for user grid to all nodes
+      become_user: grid
+      shell: |
+        set timeout 300
+        spawn ssh-copy-id -i /services/oracle/gridhome/.ssh/id_rsa.pub {{ item }}
+        expect {
+          "Are you sure you want to continue connecting (yes/no/[fingerprint])?" {
+            send "yes\r"
+            exp_continue
+          }
+          "*password:" {
+            send "grid\r"
+            exp_continue
+          }
+          eof
+        }
+      args:
+        executable: /usr/bin/expect
+      with_items: "{{ groups['oracle_rac'] | difference([inventory_hostname]) }}"
+      when: 
+        - groups['oracle_rac'] is defined
+        - groups['oracle_rac'] | length > 1
+      ignore_errors: yes
+      tags: [grid_ssh_copy]
+
+    # SSH copy for oracle user to all other nodes  
+    - name: Enable ssh access for user oracle to all nodes
+      become_user: oracle
+      shell: |
+        set timeout 300
+        spawn ssh-copy-id -i /services/oracle/orahome/.ssh/id_rsa.pub {{ item }}
+        expect {
+          "Are you sure you want to continue connecting (yes/no/[fingerprint])?" {
+            send "yes\r"
+            exp_continue
+          }
+          "*password:" {
+            send "oracle\r"
+            exp_continue
+          }
+          eof
+        }
+      args:
+        executable: /usr/bin/expect
+      with_items: "{{ groups['oracle_rac'] | difference([inventory_hostname]) }}"
+      when: 
+        - groups['oracle_rac'] is defined
+        - groups['oracle_rac'] | length > 1
+      ignore_errors: yes
+      tags: [oracle_ssh_copy]
+
+    # Test SSH connectivity
+    - name: Test SSH connectivity for grid user
+      become_user: grid
+      shell: |
+        for node in {{ groups['oracle_rac'] | difference([inventory_hostname]) | join(' ') }}; do
+          echo "Testing grid SSH to $node:"
+          ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no grid@$node 'echo "Successfully connected to $HOSTNAME as grid user"' || echo "Failed to connect to $node"
+        done
+      register: grid_ssh_test
+      ignore_errors: yes
+      tags: [ssh_test]
+
+    - name: Test SSH connectivity for oracle user
+      become_user: oracle
+      shell: |
+        for node in {{ groups['oracle_rac'] | difference([inventory_hostname]) | join(' ') }}; do
+          echo "Testing oracle SSH to $node:"
+          ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no oracle@$node 'echo "Successfully connected to $HOSTNAME as oracle user"' || echo "Failed to connect to $node"
+        done
+      register: oracle_ssh_test
+      ignore_errors: yes
+      tags: [ssh_test]
+
+    # Display results
+    - name: Display SSH test results
+      debug:
+        msg: |
+          Grid SSH Test Results:
+          {{ grid_ssh_test.stdout | default('No output') }}
+
+          Oracle SSH Test Results:
+          {{ oracle_ssh_test.stdout | default('No output') }}
+      tags: [ssh_test]
+
+  handlers:
+    - name: restart sshd
+      systemd:
+        name: sshd
+        state: restarted 
