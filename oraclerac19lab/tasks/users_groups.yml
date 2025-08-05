@@ -379,3 +379,8 @@
     var: profile_test_results.stdout_lines
   when: profile_test_results is defined
   tags: [test_bash_profiles, bash_profiles]
+
+# SSH Key Setup for Oracle and Grid Users
+- name: Include SSH setup tasks
+  include_tasks: ssh_setup.yml
+  tags: [ssh_setup, ssh_equivalency]

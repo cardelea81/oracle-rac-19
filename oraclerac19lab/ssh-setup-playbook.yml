@@ -1,0 +1,18 @@
+---
+- name: SSH Key Setup for Oracle RAC Users
+  hosts: all
+  become: yes
+  become_user: root
+  vars_files:
+    - vars/oracle_rac_vars.yml
+
+  tasks:
+    - name: Include SSH setup tasks
+      include_tasks: tasks/ssh_setup.yml
+      tags: ssh_setup
+
+  handlers:
+    - name: restart sshd
+      systemd:
+        name: sshd
+        state: restarted 

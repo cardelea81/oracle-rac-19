@@ -1,0 +1,213 @@
+---
+# SSH Key Setup and Distribution for Oracle RAC Users
+# This file handles ssh-copy-id functionality for oracle and grid users
+
+- name: Ensure .ssh directories exist for oracle user
+  file:
+    path: /services/oracle/orahome/.ssh
+    state: directory
+    owner: oracle
+    group: oinstall
+    mode: '0700'
+  ignore_errors: yes
+  tags: [ssh_dirs, ssh_setup]
+
+- name: Ensure .ssh directories exist for grid user
+  file:
+    path: /services/oracle/gridhome/.ssh
+    state: directory
+    owner: grid
+    group: oinstall
+    mode: '0700'
+  ignore_errors: yes
+  tags: [ssh_dirs, ssh_setup]
+
+- name: Generate SSH key pair for oracle user
+  openssh_keypair:
+    path: /services/oracle/orahome/.ssh/id_rsa
+    type: rsa
+    size: 2048
+    owner: oracle
+    group: oinstall
+    mode: '0600'
+  ignore_errors: yes
+  tags: [ssh_keygen, ssh_setup]
+
+- name: Generate SSH key pair for grid user
+  openssh_keypair:
+    path: /services/oracle/gridhome/.ssh/id_rsa
+    type: rsa
+    size: 2048
+    owner: grid
+    group: oinstall
+    mode: '0600'
+  ignore_errors: yes
+  tags: [ssh_keygen, ssh_setup]
+
+- name: Read oracle user public key
+  slurp:
+    src: /services/oracle/orahome/.ssh/id_rsa.pub
+  register: oracle_public_key
+  ignore_errors: yes
+  tags: [ssh_fetch, ssh_setup]
+
+- name: Read grid user public key
+  slurp:
+    src: /services/oracle/gridhome/.ssh/id_rsa.pub
+  register: grid_public_key
+  ignore_errors: yes
+  tags: [ssh_fetch, ssh_setup]
+
+- name: Display public key status
+  debug:
+    msg: |
+      Oracle public key available: {{ oracle_public_key.content is defined }}
+      Grid public key available: {{ grid_public_key.content is defined }}
+  tags: [ssh_debug, ssh_setup]
+
+# Distribute oracle public keys to all nodes
+- name: Add oracle public key to authorized_keys on all nodes
+  authorized_key:
+    user: oracle
+    key: "{{ hostvars[item]['oracle_public_key']['content'] | b64decode }}"
+    state: present
+    path: /services/oracle/orahome/.ssh/authorized_keys
+  with_items: "{{ groups['oracle_rac'] | default(groups['all']) }}"
+  when: 
+    - hostvars[item]['oracle_public_key'] is defined
+    - hostvars[item]['oracle_public_key']['content'] is defined
+  ignore_errors: yes
+  tags: [ssh_distribute, ssh_setup]
+
+# Distribute grid public keys to all nodes
+- name: Add grid public key to authorized_keys on all nodes
+  authorized_key:
+    user: grid
+    key: "{{ hostvars[item]['grid_public_key']['content'] | b64decode }}"
+    state: present
+    path: /services/oracle/gridhome/.ssh/authorized_keys
+  with_items: "{{ groups['oracle_rac'] | default(groups['all']) }}"
+  when: 
+    - hostvars[item]['grid_public_key'] is defined
+    - hostvars[item]['grid_public_key']['content'] is defined
+  ignore_errors: yes
+  tags: [ssh_distribute, ssh_setup]
+
+# Set proper permissions on authorized_keys files
+- name: Set permissions on oracle authorized_keys
+  file:
+    path: /services/oracle/orahome/.ssh/authorized_keys
+    owner: oracle
+    group: oinstall
+    mode: '0600'
+  ignore_errors: yes
+  tags: [ssh_perms, ssh_setup]
+
+- name: Set permissions on grid authorized_keys
+  file:
+    path: /services/oracle/gridhome/.ssh/authorized_keys
+    owner: grid
+    group: oinstall
+    mode: '0600'
+  ignore_errors: yes
+  tags: [ssh_perms, ssh_setup]
+
+# Setup known_hosts for all nodes
+- name: Get SSH host keys for all nodes
+  shell: ssh-keyscan -H {{ item }}
+  register: ssh_host_keys
+  with_items: "{{ groups['oracle_rac'] | default(groups['all']) }}"
+  ignore_errors: yes
+  tags: [ssh_known_hosts, ssh_setup]
+
+- name: Add host keys to oracle user known_hosts
+  known_hosts:
+    name: "{{ item.item }}"
+    key: "{{ item.stdout }}"
+    path: /services/oracle/orahome/.ssh/known_hosts
+  with_items: "{{ ssh_host_keys.results }}"
+  when: 
+    - item.stdout is defined
+    - item.stdout != ""
+  ignore_errors: yes
+  tags: [ssh_known_hosts, ssh_setup]
+
+- name: Add host keys to grid user known_hosts
+  known_hosts:
+    name: "{{ item.item }}"
+    key: "{{ item.stdout }}"
+    path: /services/oracle/gridhome/.ssh/known_hosts
+  with_items: "{{ ssh_host_keys.results }}"
+  when: 
+    - item.stdout is defined
+    - item.stdout != ""
+  ignore_errors: yes
+  tags: [ssh_known_hosts, ssh_setup]
+
+- name: Set ownership on known_hosts files
+  file:
+    path: "{{ item }}"
+    owner: "{{ item.split('/')[-3] }}"
+    group: oinstall
+    mode: '0644'
+  with_items:
+    - /services/oracle/orahome/.ssh/known_hosts
+    - /services/oracle/gridhome/.ssh/known_hosts
+  ignore_errors: yes
+  tags: [ssh_perms, ssh_setup]
+
+# Test SSH connectivity
+- name: Test SSH connectivity for oracle user
+  shell: |
+    for node in {{ groups['oracle_rac'] | default(groups['all']) | join(' ') }}; do
+      if [ "$node" != "{{ inventory_hostname }}" ]; then
+        echo "Testing oracle SSH to $node:"
+        su - oracle -c "ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no oracle@$node 'echo Connected to $node as oracle user'" || echo "Failed to connect to $node"
+      fi
+    done
+  register: oracle_ssh_test
+  ignore_errors: yes
+  tags: [ssh_test, ssh_setup]
+
+- name: Test SSH connectivity for grid user
+  shell: |
+    for node in {{ groups['oracle_rac'] | default(groups['all']) | join(' ') }}; do
+      if [ "$node" != "{{ inventory_hostname }}" ]; then
+        echo "Testing grid SSH to $node:"
+        su - grid -c "ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no grid@$node 'echo Connected to $node as grid user'" || echo "Failed to connect to $node"
+      fi
+    done
+  register: grid_ssh_test
+  ignore_errors: yes
+  tags: [ssh_test, ssh_setup]
+
+- name: Display SSH test results
+  debug:
+    msg: |
+      Oracle SSH Test Results:
+      {{ oracle_ssh_test.stdout | default('No output') }}
+      
+      Grid SSH Test Results:
+      {{ grid_ssh_test.stdout | default('No output') }}
+  tags: [ssh_test, ssh_setup]
+
+# Create a summary of SSH setup
+- name: Verify SSH setup completion
+  shell: |
+    echo "=== SSH Setup Summary for {{ inventory_hostname }} ==="
+    echo "Oracle user SSH files:"
+    ls -la /services/oracle/orahome/.ssh/ 2>/dev/null || echo "Oracle .ssh directory missing"
+    echo ""
+    echo "Grid user SSH files:"
+    ls -la /services/oracle/gridhome/.ssh/ 2>/dev/null || echo "Grid .ssh directory missing"
+    echo ""
+    echo "Authorized keys count:"
+    echo "Oracle: $(wc -l < /services/oracle/orahome/.ssh/authorized_keys 2>/dev/null || echo 0) keys"
+    echo "Grid: $(wc -l < /services/oracle/gridhome/.ssh/authorized_keys 2>/dev/null || echo 0) keys"
+  register: ssh_summary
+  tags: [ssh_summary, ssh_setup]
+
+- name: Display SSH setup summary
+  debug:
+    var: ssh_summary.stdout_lines
+  tags: [ssh_summary, ssh_setup] 
