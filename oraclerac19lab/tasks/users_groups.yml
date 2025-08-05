@@ -108,7 +108,7 @@
     - /services/oracle/grid/gridbase
     - /services/oracle/grid/19.3/grid_home
     - /services/oracle/db/19.3/db_home
-  tags: [create_dirs, bash_profiles]
+  tags: [create_dirs, bash_profiles, users]
 
 - name: Create grid user bash profile directly (Node 1)
   copy:
@@ -135,7 +135,7 @@
       umask 022
     mode: '0644'
   when: "'oracle_rac_node1' in group_names"
-  tags: [create_profiles, bash_profiles]
+  tags: [create_profiles, bash_profiles, users]
 
 - name: Create grid user bash profile directly (Node 2)
   copy:
@@ -162,7 +162,7 @@
       umask 022
     mode: '0644'
   when: "'oracle_rac_node2' in group_names"
-  tags: [create_profiles, bash_profiles]
+  tags: [create_profiles, bash_profiles, users]
 
 - name: Create oracle user bash profile directly (Node 1)
   copy:
@@ -189,7 +189,7 @@
       umask 022
     mode: '0644'
   when: "'oracle_rac_node1' in group_names"
-  tags: [create_profiles, bash_profiles]
+  tags: [create_profiles, bash_profiles, users]
 
 - name: Create oracle user bash profile directly (Node 2)
   copy:
@@ -216,7 +216,7 @@
       umask 022
     mode: '0644'
   when: "'oracle_rac_node2' in group_names"
-  tags: [create_profiles, bash_profiles]
+  tags: [create_profiles, bash_profiles, users]
 
 - name: Set ownership after users are created
   shell: |
@@ -230,7 +230,7 @@
       chown -R oracle:oinstall /services/oracle/orahome 2>/dev/null || true
     fi
   ignore_errors: yes
-  tags: [set_ownership, bash_profiles]
+  tags: [set_ownership, bash_profiles, users]
 
 # Simple verification and testing
 - name: Verify bash profiles were created
@@ -240,7 +240,7 @@
   with_items:
     - /services/oracle/gridhome/.bash_profile
     - /services/oracle/orahome/.bash_profile
-  tags: [verify_bash_profiles, bash_profiles]
+  tags: [verify_bash_profiles, bash_profiles, users]
 
 - name: Display bash profile verification results
   debug:
@@ -249,7 +249,7 @@
       Exists: {{ item.stat.exists }}
       Size: {{ item.stat.size | default('0') }} bytes
   with_items: "{{ bash_profile_verification.results }}"
-  tags: [verify_bash_profiles, bash_profiles]
+  tags: [verify_bash_profiles, bash_profiles, users]
 
 - name: Test bash profiles (when users exist)
   shell: |
@@ -263,10 +263,10 @@
     fi
   register: profile_test_results
   ignore_errors: yes
-  tags: [test_bash_profiles, bash_profiles]
+  tags: [test_bash_profiles, bash_profiles, users]
 
 - name: Display profile test results
   debug:
     var: profile_test_results.stdout_lines
   when: profile_test_results is defined
-  tags: [test_bash_profiles, bash_profiles]
+  tags: [test_bash_profiles, bash_profiles, users]
