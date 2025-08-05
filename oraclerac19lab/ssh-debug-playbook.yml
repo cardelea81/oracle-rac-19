@@ -1,0 +1,154 @@
+---
+- name: SSH Connection Diagnostic for Oracle RAC Users
+  hosts: all
+  become: yes
+  vars_files:
+    - vars/oracle_rac_vars.yml
+
+  tasks:
+    # Check if users exist
+    - name: Check if Oracle users exist
+      shell: |
+        echo "=== User Status Check ==="
+        echo "Grid user:"
+        id grid 2>/dev/null && echo "✓ Grid user exists" || echo "✗ Grid user missing"
+        echo "Oracle user:"
+        id oracle 2>/dev/null && echo "✓ Oracle user exists" || echo "✗ Oracle user missing"
+        echo ""
+        echo "=== Home Directories ==="
+        ls -la /services/oracle/gridhome 2>/dev/null && echo "✓ Grid home exists" || echo "✗ Grid home missing"
+        ls -la /services/oracle/orahome 2>/dev/null && echo "✓ Oracle home exists" || echo "✗ Oracle home missing"
+      register: user_check
+      tags: [users]
+
+    # Check SSH keys
+    - name: Check SSH key status
+      shell: |
+        echo "=== SSH Key Status ==="
+        echo "Grid SSH keys:"
+        if [ -f /services/oracle/gridhome/.ssh/id_rsa ]; then
+          echo "✓ Grid private key exists"
+          ls -la /services/oracle/gridhome/.ssh/id_rsa*
+        else
+          echo "✗ Grid private key missing"
+        fi
+        
+        echo ""
+        echo "Oracle SSH keys:"
+        if [ -f /services/oracle/orahome/.ssh/id_rsa ]; then
+          echo "✓ Oracle private key exists"
+          ls -la /services/oracle/orahome/.ssh/id_rsa*
+        else
+          echo "✗ Oracle private key missing"
+        fi
+        
+        echo ""
+        echo "=== Authorized Keys ==="
+        echo "Grid authorized_keys:"
+        if [ -f /services/oracle/gridhome/.ssh/authorized_keys ]; then
+          echo "✓ Grid authorized_keys exists ($(wc -l < /services/oracle/gridhome/.ssh/authorized_keys) keys)"
+          cat /services/oracle/gridhome/.ssh/authorized_keys | head -2
+        else
+          echo "✗ Grid authorized_keys missing"
+        fi
+        
+        echo ""
+        echo "Oracle authorized_keys:"
+        if [ -f /services/oracle/orahome/.ssh/authorized_keys ]; then
+          echo "✓ Oracle authorized_keys exists ($(wc -l < /services/oracle/orahome/.ssh/authorized_keys) keys)"
+          cat /services/oracle/orahome/.ssh/authorized_keys | head -2
+        else
+          echo "✗ Oracle authorized_keys missing"
+        fi
+      register: ssh_key_check
+      tags: [ssh_keys]
+
+    # Check user passwords and authentication
+    - name: Test user authentication
+      shell: |
+        echo "=== Password Authentication Test ==="
+        echo "Testing grid user login:"
+        echo "grid" | su - grid -c "whoami && pwd" 2>/dev/null && echo "✓ Grid user can login" || echo "✗ Grid user login failed"
+        
+        echo "Testing oracle user login:"
+        echo "oracle" | su - oracle -c "whoami && pwd" 2>/dev/null && echo "✓ Oracle user can login" || echo "✗ Oracle user login failed"
+      register: auth_check
+      tags: [auth]
+
+    # Check SSH daemon configuration
+    - name: Check SSH daemon status and config
+      shell: |
+        echo "=== SSH Daemon Status ==="
+        systemctl is-active sshd && echo "✓ SSH daemon is running" || echo "✗ SSH daemon not running"
+        systemctl is-enabled sshd && echo "✓ SSH daemon is enabled" || echo "✗ SSH daemon not enabled"
+        
+        echo ""
+        echo "=== SSH Configuration ==="
+        grep -E "^(PasswordAuthentication|PubkeyAuthentication|PermitRootLogin)" /etc/ssh/sshd_config || echo "Default SSH settings"
+        
+        echo ""
+        echo "=== Network Connectivity ==="
+        ping -c 1 oracle-node01.lab.dev.example.com >/dev/null 2>&1 && echo "✓ Can reach node01" || echo "✗ Cannot reach node01"
+        ping -c 1 oracle-node02.lab.dev.example.com >/dev/null 2>&1 && echo "✓ Can reach node02" || echo "✗ Cannot reach node02"
+      register: ssh_config_check
+      tags: [ssh_config]
+
+    # Test manual SSH key copying
+    - name: Test manual SSH key operations
+      shell: |
+        echo "=== Manual SSH Key Test ==="
+        if id grid >/dev/null 2>&1; then
+          echo "Testing grid user SSH key operations:"
+          sudo -u grid ssh-keygen -l -f /services/oracle/gridhome/.ssh/id_rsa.pub 2>/dev/null && echo "✓ Grid public key is valid" || echo "✗ Grid public key invalid"
+        fi
+        
+        if id oracle >/dev/null 2>&1; then
+          echo "Testing oracle user SSH key operations:"
+          sudo -u oracle ssh-keygen -l -f /services/oracle/orahome/.ssh/id_rsa.pub 2>/dev/null && echo "✓ Oracle public key is valid" || echo "✗ Oracle public key invalid"
+        fi
+      register: manual_ssh_test
+      tags: [manual_test]
+
+    # Display all results
+    - name: Display user check results
+      debug:
+        var: user_check.stdout_lines
+      tags: [results]
+
+    - name: Display SSH key check results
+      debug:
+        var: ssh_key_check.stdout_lines
+      tags: [results]
+
+    - name: Display authentication check results
+      debug:
+        var: auth_check.stdout_lines
+      tags: [results]
+
+    - name: Display SSH config check results
+      debug:
+        var: ssh_config_check.stdout_lines
+      tags: [results]
+
+    - name: Display manual SSH test results
+      debug:
+        var: manual_ssh_test.stdout_lines
+      tags: [results]
+
+    # Fix common issues
+    - name: Fix SSH directory permissions
+      shell: |
+        if id grid >/dev/null 2>&1; then
+          mkdir -p /services/oracle/gridhome/.ssh
+          chown -R grid:oinstall /services/oracle/gridhome/.ssh
+          chmod 700 /services/oracle/gridhome/.ssh
+          chmod 600 /services/oracle/gridhome/.ssh/* 2>/dev/null || true
+        fi
+        
+        if id oracle >/dev/null 2>&1; then
+          mkdir -p /services/oracle/orahome/.ssh
+          chown -R oracle:oinstall /services/oracle/orahome/.ssh
+          chmod 700 /services/oracle/orahome/.ssh
+          chmod 600 /services/oracle/orahome/.ssh/* 2>/dev/null || true
+        fi
+      tags: [fix_perms] 
