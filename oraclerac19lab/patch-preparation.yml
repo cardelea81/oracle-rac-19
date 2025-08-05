@@ -45,17 +45,14 @@
     # Copy patch files to grid patch directory
     - name: Copy patch files to grid patch directory
       copy:
-        src: "{{ patch_source_dir }}/{{ item.filename }}"
-        dest: "{{ grid_patch_dir }}/{{ item.filename }}"
+        src: "{{ patch_source_dir }}/{{ item.item.filename }}"
+        dest: "{{ grid_patch_dir }}/{{ item.item.filename }}"
         owner: grid
         group: oinstall
         mode: '0644'
         remote_src: yes
-      with_items: "{{ patches }}"
-      when: source_files_check.results[loop.index0].stat.exists
-      loop_control:
-        loop_var: item
-        index_var: loop_index0
+      with_items: "{{ source_files_check.results }}"
+      when: item.stat.exists
       tags: [copy_patches]
 
     # Verify copied files
