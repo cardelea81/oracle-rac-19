@@ -89,18 +89,13 @@
       owner: root
       group: root
       state: link
-
-  - name: be sure firewalld is disabled
-    systemd: name=firewalld enabled=no
-      tags:
-      - install
-      - firewalld
-  - name: be sure firewalld is stopped 
-    systemd: name=firewalld state=stopped
+  - name: Stop and disable firewalld
+    systemd:
+     name: firewalld
+     state: stopped
+     enabled: no
     ignore_errors: yes
-      tags:
-      - install
-      - firewalld
+
   - name: ensure SELINUX IS IN PERMISIVE MODE
     selinux: policy=targeted state=permissive
   - name: Create a directory gridhome
