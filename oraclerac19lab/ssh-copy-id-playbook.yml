@@ -6,6 +6,18 @@
     - vars/oracle_rac_vars.yml
 
   tasks:
+    # Debug groups to see what's available
+    - name: Debug available groups and hosts
+      debug:
+        msg: |
+          All groups: {{ groups.keys() | list }}
+          Current host: {{ inventory_hostname }}
+          All hosts: {{ groups['all'] | default([]) }}
+          Oracle RAC: {{ groups['oracle_rac'] | default('NOT FOUND') }}
+          Oracle RAC Node1: {{ groups['oracle_rac_node1'] | default('NOT FOUND') }}
+          Oracle RAC Node2: {{ groups['oracle_rac_node2'] | default('NOT FOUND') }}
+      tags: [debug]
+
     # First ensure SSH keys exist
     - name: Ensure SSH keys exist for grid user
       openssh_keypair:
@@ -27,6 +39,17 @@
         mode: '0600'
       tags: [ssh_keys]
 
+    # Build the target host list more robustly
+    - name: Set target hosts for SSH copy
+      set_fact:
+        target_hosts: "{{ (groups['oracle_rac'] | default([])) | union(groups['oracle_rac_node1'] | default([])) | union(groups['oracle_rac_node2'] | default([])) | difference([inventory_hostname]) | unique }}"
+      tags: [ssh_setup]
+
+    - name: Debug target hosts
+      debug:
+        msg: "Target hosts for SSH copy: {{ target_hosts }}"
+      tags: [debug]
+
     # SSH copy for grid user to all other nodes
     - name: Enable ssh access for user grid to all nodes
       become_user: grid
@@ -46,10 +69,8 @@
         }
       args:
         executable: /usr/bin/expect
-      with_items: "{{ groups['oracle_rac'] | difference([inventory_hostname]) }}"
-      when: 
-        - groups['oracle_rac'] is defined
-        - groups['oracle_rac'] | length > 1
+      with_items: "{{ target_hosts }}"
+      when: target_hosts | length > 0
       ignore_errors: yes
       tags: [grid_ssh_copy]
 
@@ -72,10 +93,8 @@
         }
       args:
         executable: /usr/bin/expect
-      with_items: "{{ groups['oracle_rac'] | difference([inventory_hostname]) }}"
-      when: 
-        - groups['oracle_rac'] is defined
-        - groups['oracle_rac'] | length > 1
+      with_items: "{{ target_hosts }}"
+      when: target_hosts | length > 0
       ignore_errors: yes
       tags: [oracle_ssh_copy]
 
@@ -83,22 +102,24 @@
     - name: Test SSH connectivity for grid user
       become_user: grid
       shell: |
-        for node in {{ groups['oracle_rac'] | difference([inventory_hostname]) | join(' ') }}; do
+        for node in {{ target_hosts | join(' ') }}; do
           echo "Testing grid SSH to $node:"
           ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no grid@$node 'echo "Successfully connected to $HOSTNAME as grid user"' || echo "Failed to connect to $node"
         done
       register: grid_ssh_test
+      when: target_hosts | length > 0
       ignore_errors: yes
       tags: [ssh_test]
 
     - name: Test SSH connectivity for oracle user
       become_user: oracle
       shell: |
-        for node in {{ groups['oracle_rac'] | difference([inventory_hostname]) | join(' ') }}; do
+        for node in {{ target_hosts | join(' ') }}; do
           echo "Testing oracle SSH to $node:"
           ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no oracle@$node 'echo "Successfully connected to $HOSTNAME as oracle user"' || echo "Failed to connect to $node"
         done
       register: oracle_ssh_test
+      when: target_hosts | length > 0
       ignore_errors: yes
       tags: [ssh_test]
 
@@ -107,10 +128,10 @@
       debug:
         msg: |
           Grid SSH Test Results:
-          {{ grid_ssh_test.stdout | default('No output') }}
+          {{ grid_ssh_test.stdout | default('No SSH test performed') }}
 
           Oracle SSH Test Results:
-          {{ oracle_ssh_test.stdout | default('No output') }}
+          {{ oracle_ssh_test.stdout | default('No SSH test performed') }}
       tags: [ssh_test]
 
   handlers:
