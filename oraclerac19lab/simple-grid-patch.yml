@@ -1,0 +1,54 @@
+---
+- name: Simple Oracle Grid Patching (Based on User Commands)
+  hosts: oracle_rac_node1  # Run on first node only
+  become: yes
+  become_user: grid
+  vars:
+    grid_home: /services/oracle/grid/19.3/grid_home
+    patch_home: /services/oracle/gridhome
+
+  tasks:
+    - name: Remove old OPatch directory
+      file:
+        path: "{{ grid_home }}/OPatch"
+        state: absent
+      tags: [remove_opatch]
+
+    - name: Extract OPatch to Grid Home
+      shell: |
+        cd {{ grid_home }}
+        unzip {{ patch_home }}/patch/p6880880_121010_Linux-x86-64.zip
+      tags: [install_opatch]
+
+    - name: Extract PSU patch to patch directory
+      shell: |
+        cd {{ patch_home }}
+        unzip patch/p34762026_190000_Linux-x86-64.zip -d .
+      tags: [extract_psu]
+
+    - name: Apply PSU using gridSetup.sh (relative path)
+      shell: |
+        cd {{ grid_home }}
+        ./gridSetup.sh -applyPSU {{ patch_home }}/34762026/
+      tags: [apply_psu]
+
+    - name: Alternative - Apply PSU using gridSetup.sh (absolute path)
+      shell: |
+        {{ grid_home }}/gridSetup.sh -applyPSU {{ patch_home }}/34762026/
+      tags: [apply_psu_alt]
+      when: false  # Disabled by default
+
+    - name: Verify patch application
+      shell: |
+        echo "=== Patch Verification ==="
+        {{ grid_home }}/OPatch/opatch lspatches
+        echo ""
+        echo "=== Grid Status ==="
+        {{ grid_home }}/bin/crsctl stat res -t
+      register: patch_verify
+      tags: [verify]
+
+    - name: Display verification results
+      debug:
+        var: patch_verify.stdout_lines
+      tags: [verify] 

@@ -1,0 +1,132 @@
+---
+- name: Prepare Oracle Grid Patch Files
+  hosts: all
+  become: yes
+  vars:
+    patch_source_dir: /tmp/oracle_patches  # Where you upload/copy the patch files
+    grid_patch_dir: /services/oracle/gridhome/patch
+    patches:
+      - filename: p6880880_121010_Linux-x86-64.zip
+        description: OPatch Utility
+      - filename: p34762026_190000_Linux-x86-64.zip  
+        description: Grid PSU Patch
+
+  tasks:
+    # Create patch directories
+    - name: Create patch directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: grid
+        group: oinstall
+        mode: '0755'
+      with_items:
+        - "{{ grid_patch_dir }}"
+        - /services/oracle/gridhome/patches
+      tags: [prep_dirs]
+
+    # Check source patch files
+    - name: Check if source patch files exist
+      stat:
+        path: "{{ patch_source_dir }}/{{ item.filename }}"
+      register: source_files_check
+      with_items: "{{ patches }}"
+      tags: [check_source]
+
+    - name: Display source files status
+      debug:
+        msg: |
+          Source patch files status:
+          {% for item in source_files_check.results %}
+          {{ item.item.filename }} ({{ item.item.description }}): {{ 'EXISTS' if item.stat.exists else 'MISSING' }}
+          {% endfor %}
+      tags: [check_source]
+
+    # Copy patch files to grid patch directory
+    - name: Copy patch files to grid patch directory
+      copy:
+        src: "{{ patch_source_dir }}/{{ item.filename }}"
+        dest: "{{ grid_patch_dir }}/{{ item.filename }}"
+        owner: grid
+        group: oinstall
+        mode: '0644'
+        remote_src: yes
+      with_items: "{{ patches }}"
+      when: source_files_check.results[loop.index0].stat.exists
+      loop_control:
+        loop_var: item
+        index_var: loop_index0
+      tags: [copy_patches]
+
+    # Verify copied files
+    - name: Verify copied patch files
+      stat:
+        path: "{{ grid_patch_dir }}/{{ item.filename }}"
+      register: copied_files_check
+      with_items: "{{ patches }}"
+      tags: [verify_copy]
+
+    - name: Display copied files status
+      debug:
+        msg: |
+          Copied patch files status:
+          {% for item in copied_files_check.results %}
+          {{ grid_patch_dir }}/{{ item.item.filename }}: {{ 'OK' if item.stat.exists else 'MISSING' }}
+          Size: {{ item.stat.size | default(0) }} bytes
+          {% endfor %}
+      tags: [verify_copy]
+
+    # Create a simple inventory of patches
+    - name: Create patch inventory file
+      shell: |
+        echo "Oracle Grid Infrastructure Patch Inventory" > {{ grid_patch_dir }}/patch_inventory.txt
+        echo "Generated on: $(date)" >> {{ grid_patch_dir }}/patch_inventory.txt
+        echo "Node: {{ inventory_hostname }}" >> {{ grid_patch_dir }}/patch_inventory.txt
+        echo "" >> {{ grid_patch_dir }}/patch_inventory.txt
+        echo "Available Patches:" >> {{ grid_patch_dir }}/patch_inventory.txt
+        {% for patch in patches %}
+        if [ -f "{{ grid_patch_dir }}/{{ patch.filename }}" ]; then
+          echo "✓ {{ patch.filename }} - {{ patch.description }}" >> {{ grid_patch_dir }}/patch_inventory.txt
+          echo "  Size: $(ls -lh {{ grid_patch_dir }}/{{ patch.filename }} | awk '{print $5}')" >> {{ grid_patch_dir }}/patch_inventory.txt
+        else
+          echo "✗ {{ patch.filename }} - {{ patch.description }} (MISSING)" >> {{ grid_patch_dir }}/patch_inventory.txt
+        fi
+        {% endfor %}
+        
+        chown grid:oinstall {{ grid_patch_dir }}/patch_inventory.txt
+      tags: [inventory]
+
+    - name: Display patch inventory
+      shell: cat {{ grid_patch_dir }}/patch_inventory.txt
+      register: patch_inventory
+      tags: [inventory]
+
+    - name: Show patch inventory
+      debug:
+        var: patch_inventory.stdout_lines
+      tags: [inventory]
+
+    # Final preparation summary
+    - name: Preparation summary
+      debug:
+        msg: |
+          =============================================
+          Oracle Grid Patch Preparation Complete
+          =============================================
+          Node: {{ inventory_hostname }}
+          Patch Directory: {{ grid_patch_dir }}
+          
+          Files Ready:
+          {% for item in copied_files_check.results %}
+          - {{ item.item.filename }}: {{ 'READY' if item.stat.exists else 'MISSING' }}
+          {% endfor %}
+          
+          Next Steps:
+          1. Ensure all nodes have the patches prepared
+          2. Run the grid patching playbook:
+             ansible-playbook grid-patching-playbook.yml -i tests/inventory
+          
+          Or run the simple version:
+             ansible-playbook simple-grid-patch.yml -i tests/inventory
+          =============================================
+      tags: [summary] 
