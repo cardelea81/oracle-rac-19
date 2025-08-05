@@ -1,0 +1,121 @@
+---
+- name: Distribute SSH Keys for Oracle RAC Users
+  hosts: all
+  become: yes
+  vars_files:
+    - vars/oracle_rac_vars.yml
+
+  tasks:
+    # Collect all public keys from all nodes
+    - name: Read grid public key from each node
+      slurp:
+        src: /services/oracle/gridhome/.ssh/id_rsa.pub
+      register: grid_public_key
+      tags: [collect_keys]
+
+    - name: Read oracle public key from each node
+      slurp:
+        src: /services/oracle/orahome/.ssh/id_rsa.pub
+      register: oracle_public_key
+      tags: [collect_keys]
+
+    # Create authorized_keys with all grid public keys
+    - name: Create grid authorized_keys with all public keys
+      shell: |
+        # Create empty authorized_keys file
+        > /services/oracle/gridhome/.ssh/authorized_keys
+        
+        # Add all grid public keys from all nodes
+        {% for host in groups['all'] %}
+        echo "{{ hostvars[host]['grid_public_key']['content'] | b64decode | trim }}" >> /services/oracle/gridhome/.ssh/authorized_keys
+        {% endfor %}
+        
+        # Fix permissions
+        chown grid:oinstall /services/oracle/gridhome/.ssh/authorized_keys
+        chmod 600 /services/oracle/gridhome/.ssh/authorized_keys
+        
+        # Remove duplicates
+        sort /services/oracle/gridhome/.ssh/authorized_keys | uniq > /tmp/grid_auth_keys_tmp
+        mv /tmp/grid_auth_keys_tmp /services/oracle/gridhome/.ssh/authorized_keys
+        chown grid:oinstall /services/oracle/gridhome/.ssh/authorized_keys
+        chmod 600 /services/oracle/gridhome/.ssh/authorized_keys
+      tags: [distribute_grid]
+
+    # Create authorized_keys with all oracle public keys
+    - name: Create oracle authorized_keys with all public keys
+      shell: |
+        # Create empty authorized_keys file
+        > /services/oracle/orahome/.ssh/authorized_keys
+        
+        # Add all oracle public keys from all nodes
+        {% for host in groups['all'] %}
+        echo "{{ hostvars[host]['oracle_public_key']['content'] | b64decode | trim }}" >> /services/oracle/orahome/.ssh/authorized_keys
+        {% endfor %}
+        
+        # Fix permissions
+        chown oracle:oinstall /services/oracle/orahome/.ssh/authorized_keys
+        chmod 600 /services/oracle/orahome/.ssh/authorized_keys
+        
+        # Remove duplicates
+        sort /services/oracle/orahome/.ssh/authorized_keys | uniq > /tmp/oracle_auth_keys_tmp
+        mv /tmp/oracle_auth_keys_tmp /services/oracle/orahome/.ssh/authorized_keys
+        chown oracle:oinstall /services/oracle/orahome/.ssh/authorized_keys
+        chmod 600 /services/oracle/orahome/.ssh/authorized_keys
+      tags: [distribute_oracle]
+
+    # Verify the distribution worked
+    - name: Verify authorized_keys files
+      shell: |
+        echo "=== Grid authorized_keys ==="
+        if [ -f /services/oracle/gridhome/.ssh/authorized_keys ]; then
+          echo "✓ Grid authorized_keys exists ($(wc -l < /services/oracle/gridhome/.ssh/authorized_keys) keys)"
+          ls -la /services/oracle/gridhome/.ssh/authorized_keys
+        else
+          echo "✗ Grid authorized_keys still missing"
+        fi
+        
+        echo ""
+        echo "=== Oracle authorized_keys ==="
+        if [ -f /services/oracle/orahome/.ssh/authorized_keys ]; then
+          echo "✓ Oracle authorized_keys exists ($(wc -l < /services/oracle/orahome/.ssh/authorized_keys) keys)"
+          ls -la /services/oracle/orahome/.ssh/authorized_keys
+        else
+          echo "✗ Oracle authorized_keys still missing"
+        fi
+      register: verify_keys
+      tags: [verify]
+
+    - name: Display verification results
+      debug:
+        var: verify_keys.stdout_lines
+      tags: [verify]
+
+    # Test SSH connectivity
+    - name: Test SSH connectivity for both users
+      shell: |
+        echo "=== Testing SSH Connectivity ==="
+        
+        # Test grid user SSH to other nodes
+        echo "Grid user SSH tests:"
+        {% for host in groups['all'] %}
+        {% if host != inventory_hostname %}
+        echo "Testing grid SSH to {{ host }}:"
+        sudo -u grid ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no grid@{{ host }} 'echo "Successfully connected to $HOSTNAME as $(whoami)"' || echo "Failed to connect to {{ host }}"
+        {% endif %}
+        {% endfor %}
+        
+        echo ""
+        echo "Oracle user SSH tests:"
+        {% for host in groups['all'] %}
+        {% if host != inventory_hostname %}
+        echo "Testing oracle SSH to {{ host }}:"
+        sudo -u oracle ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no oracle@{{ host }} 'echo "Successfully connected to $HOSTNAME as $(whoami)"' || echo "Failed to connect to {{ host }}"
+        {% endif %}
+        {% endfor %}
+      register: ssh_test_results
+      tags: [test]
+
+    - name: Display SSH test results
+      debug:
+        var: ssh_test_results.stdout_lines
+      tags: [test] 
